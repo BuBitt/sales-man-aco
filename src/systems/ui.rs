@@ -1,12 +1,12 @@
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
-use rand::prelude::*;
 use std::time::{Duration, Instant};
 use std::fmt::Write;
 use crate::components::*;
 use crate::resources::*;
 use crate::ui::language::get_text;
 use crate::utils::safe_despawn;
+use crate::utils::point_distribution::generate_poisson_points;
 
 fn estimate_standard_algorithm_time(point_count: usize) -> Duration {
     let n = point_count as f64;
@@ -76,7 +76,9 @@ pub fn ui_system(
         ui.add_space(10.0);
 
         ui.horizontal(|ui| {
-            ui.add(egui::Slider::new(&mut points.count, 5..=100).text(text.points_slider));
+            ui.add(egui::Slider::new(&mut points.count, 5..=1000)
+                .text(text.points_slider)
+                .logarithmic(true));
 
             if ui.button(text.generate_points).clicked() {
                 entity_tracker.point_entities.clear();
@@ -97,13 +99,10 @@ pub fn ui_system(
                 let count = points.count.max(5);
                 points.count = count;
 
-                let mut rng = thread_rng();
-                points.positions = (0..count)
-                    .map(|_| Vec2::new(
-                        rng.gen_range(-400.0..400.0),
-                        rng.gen_range(-300.0..300.0),
-                    ))
-                    .collect();
+                let width = 900.0;
+                let height = 700.0;
+                
+                points.positions = generate_poisson_points(count, width, height);
 
                 aco_state.running = false;
                 aco_state.iterations = 0;
@@ -222,8 +221,9 @@ pub fn ui_system(
         ui.heading(text.algorithm_parameters);
         ui.add_space(10.0);
 
-        ui.add(egui::Slider::new(&mut aco_params.ant_count, 5..=100)
-            .text(text.ant_count));
+        ui.add(egui::Slider::new(&mut aco_params.ant_count, 5..=1000)
+            .text(text.ant_count)
+            .logarithmic(true));
         
         if !points.positions.is_empty() {
             let num_points = points.positions.len();

@@ -1,50 +1,59 @@
 use bevy::prelude::*;
 use bevy::input::mouse::{MouseMotion, MouseWheel};
-use crate::components::*;
+use crate::components::MainCamera;
 use crate::resources::UiState;
-
-pub fn camera_drag(
-    mut commands: Commands,
-    mouse_buttons: Res<ButtonInput<MouseButton>>,
-    mut mouse_motion_events: EventReader<MouseMotion>,
-    mut query: Query<(Entity, &mut Transform, Option<&Dragging>), With<MainCamera>>,
-    ui_state: Res<UiState>,
-) {
-    let (camera_entity, mut camera_transform, dragging) = query.single_mut();
-
-    if mouse_buttons.just_pressed(MouseButton::Left) && !ui_state.interacting_with_ui {
-        commands.entity(camera_entity).insert(Dragging);
-    }
-
-    if mouse_buttons.just_released(MouseButton::Left) || ui_state.interacting_with_ui {
-        if dragging.is_some() {
-            commands.entity(camera_entity).remove::<Dragging>();
-        }
-    }
-
-    if dragging.is_some() && !ui_state.interacting_with_ui {
-        for event in mouse_motion_events.read() {
-            camera_transform.translation.x -= event.delta.x * camera_transform.scale.x;
-            camera_transform.translation.y += event.delta.y * camera_transform.scale.y;
-        }
-    }
-}
 
 pub fn camera_zoom(
     mut mouse_wheel_events: EventReader<MouseWheel>,
-    mut query: Query<&mut Transform, With<MainCamera>>,
+    mut query: Query<&mut OrthographicProjection, With<MainCamera>>,
     ui_state: Res<UiState>,
 ) {
     if ui_state.interacting_with_ui {
         return;
     }
 
-    let mut camera_transform = query.single_mut();
+    let zoom_amount = mouse_wheel_events
+        .read()
+        .fold(0.0, |acc, ev| acc + ev.y);
 
-    for event in mouse_wheel_events.read() {
-        let zoom_factor = if event.y > 0.0 { 0.9 } else { 1.1 };
-
-        camera_transform.scale.x = (camera_transform.scale.x * zoom_factor).clamp(0.1, 5.0);
-        camera_transform.scale.y = (camera_transform.scale.y * zoom_factor).clamp(0.1, 5.0);
+    if zoom_amount == 0.0 {
+        return;
     }
+
+    let mut projection = query.single_mut();
+    
+    // Increase max zoom out to see all points
+    let min_scale = 0.1; // More zoom out
+    let max_scale = 2.0; // More zoom in
+    
+    // Smoother zoom with exponential scale
+    projection.scale = (projection.scale * (1.0 - zoom_amount * 0.1))
+        .max(min_scale)
+        .min(max_scale);
+}
+
+pub fn camera_drag(
+    mut mouse_motion_events: EventReader<MouseMotion>,
+    keyboard: Res<ButtonInput<MouseButton>>, // Updated to use ButtonInput for Bevy 0.14
+    mut query: Query<&mut Transform, With<MainCamera>>,
+    ui_state: Res<UiState>,
+) {
+    if ui_state.interacting_with_ui || !keyboard.pressed(MouseButton::Right) {
+        return;
+    }
+
+    let delta = mouse_motion_events
+        .read()
+        .fold(Vec2::ZERO, |acc, ev| acc + ev.delta);
+
+    if delta == Vec2::ZERO {
+        return;
+    }
+
+    let mut transform = query.single_mut();
+
+    // Scale movement based on zoom level for consistent feel
+    let zoom_factor = transform.scale.x.max(0.1);
+    transform.translation.x -= delta.x * zoom_factor;
+    transform.translation.y += delta.y * zoom_factor;
 }

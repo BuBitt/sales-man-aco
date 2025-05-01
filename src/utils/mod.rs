@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
+pub mod point_distribution;
+
 /// Safely despawns an entity, only if it exists in the world
 pub fn safe_despawn(commands: &mut Commands, entity: Entity) {
     // Use a specialized command to despawn only if entity exists
@@ -33,27 +35,32 @@ pub fn safe_despawn_collection(commands: &mut Commands, entities: &mut Vec<Entit
     entities.clear();
 }
 
+/// Calculate distance between two Vec2 points
+pub fn calculate_distance(a: Vec2, b: Vec2) -> f32 {
+    a.distance(b)
+}
+
+/// Calculate the total distance of a TSP path
+pub fn calculate_path_distance(path: &[usize], distances: &[Vec<f32>]) -> f32 {
+    let mut total = 0.0;
+    let n = path.len();
+    
+    for i in 0..n-1 {
+        total += distances[path[i]][path[i+1]];
+    }
+    
+    // Add distance from last to first city to complete the cycle
+    if n > 0 {
+        total += distances[path[n-1]][path[0]];
+    }
+    
+    total
+}
+
 /// More robust alternative to track entities with validation
 #[derive(Resource, Default)]
 pub struct ValidatedEntityTracker {
     /// Maps entity identifiers to the actual entities
     pub points_map: HashMap<usize, Entity>,
     pub paths_map: HashMap<(usize, usize), Entity>,
-}
-
-pub fn calculate_distance(path: &[usize], distances: &[Vec<f32>]) -> f32 {
-    let mut total_distance = 0.0;
-    let len = path.len();
-
-    for i in 0..len - 1 {
-        total_distance += distances[path[i]][path[i + 1]];
-    }
-
-    total_distance += distances[path[len - 1]][path[0]];
-    total_distance
-}
-
-// Add this helper function for string formatting
-pub fn format_with_args<T: std::fmt::Display>(format_str: &str, args: T) -> String {
-    format!("{}", format!("{}", args).replace("{}", format_str))
 }

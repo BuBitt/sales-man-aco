@@ -52,17 +52,15 @@ fn main() {
         .insert_resource(CandidateList::default())
         .insert_resource(AppLanguage::default())
         .add_systems(Startup, setup)
-        .add_systems(Update, (
-            ui_system,
-            handle_input,
-            camera_drag,
-            camera_zoom,
-            update_points_visualization,
-            update_path_visualization,
-            run_aco_algorithm,
-            update_distance_matrix,
-            update_candidate_lists,
-        ))
+        .add_systems(Update, ui_system)
+        .add_systems(Update, handle_input)
+        .add_systems(Update, camera_drag)
+        .add_systems(Update, camera_zoom)
+        .add_systems(Update, update_distance_matrix) // Run this first
+        .add_systems(Update, update_candidate_lists) // Then run this
+        .add_systems(Update, update_points_visualization)
+        .add_systems(Update, update_path_visualization)
+        .add_systems(Update, run_aco_algorithm)
         .run();
 }
 

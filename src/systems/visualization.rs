@@ -119,42 +119,42 @@ pub fn update_distance_matrix(
 
 pub fn update_candidate_lists(
     points: Res<Points>,
-    distance_matrix: Res<DistanceMatrix>,
+    distances: Res<DistanceMatrix>,
     mut candidate_lists: ResMut<CandidateList>,
 ) {
-    if points.is_changed() && !points.positions.is_empty() && !distance_matrix.distances.is_empty() {
-        let n = points.positions.len();
-        
-        // Safety check - need at least 2 points to create candidate lists
-        if n < 2 {
-            candidate_lists.nearest_neighbors = Vec::new();
-            return;
-        }
-        
-        let mut nearest_neighbors = vec![Vec::with_capacity(crate::constants::CANDIDATE_LIST_SIZE.min(n-1)); n];
-        
-        for i in 0..n {
-            // Create a vector of (index, distance) pairs - skip self connections (j != i)
-            let mut distances: Vec<(usize, f32)> = (0..n)
-                .filter(|&j| j != i)
-                .map(|j| (j, distance_matrix.distances[i][j]))
-                .collect();
-                
-            // Sort by distance (shortest first)
-            distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-            
-            // Fix: Make sure we don't take more elements than are available
-            let available = distances.len();
-            let to_take = crate::constants::CANDIDATE_LIST_SIZE.min(available);
-            
-            // Fix: Use first element of tuple directly without pattern matching
-            nearest_neighbors[i] = distances
-                .into_iter()
-                .take(to_take)
-                .map(|(idx, _)| idx)
-                .collect();
-        }
-        
-        candidate_lists.nearest_neighbors = nearest_neighbors;
+    let n = points.positions.len();
+    
+    // If there are no points, reset the candidate list to be empty
+    if n == 0 {
+        candidate_lists.nearest_neighbors = Vec::new();
+        return;
     }
+
+    // Maximum number of candidates is either 20 or n-1, whichever is smaller
+    let k = usize::min(20, n.saturating_sub(1)); // Use saturating_sub to handle the case where n might be 0
+    
+    // For each point, find its k nearest neighbors
+    candidate_lists.nearest_neighbors = (0..n)
+        .map(|i| {
+            // Skip points with no neighbors (shouldn't happen with our check above, but just to be safe)
+            if n <= 1 {
+                return Vec::new();
+            }
+            
+            // For each point, get distances to all other points
+            let mut neighbors: Vec<(usize, f32)> = (0..n)
+                .filter(|&j| i != j)
+                .map(|j| (j, distances.distances[i][j]))
+                .collect();
+            
+            // Sort by distance
+            neighbors.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+            
+            // Take only the k closest neighbors
+            neighbors.iter()
+                .take(k)
+                .map(|&(j, _)| j)
+                .collect()
+        })
+        .collect();
 }
