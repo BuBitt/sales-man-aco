@@ -54,10 +54,31 @@ pub fn ui_system(
     // Get the appropriate text based on the current language
     let text = get_text(app_language.current);
     
-    egui::Window::new("TSP Controls").show(contexts.ctx_mut(), |ui| {
-        // Language selector
+    // Enhance the UI with better styling
+    let ctx = contexts.ctx_mut();
+    
+    // Use custom visuals for the entire UI - need to clone first
+    let mut visuals = ctx.style().visuals.clone();
+    visuals.widgets.noninteractive.fg_stroke.width = 1.0;
+    visuals.widgets.inactive.fg_stroke.width = 1.0;
+    visuals.widgets.hovered.fg_stroke.width = 1.0;
+    visuals.widgets.active.fg_stroke.width = 1.0;
+    visuals.button_frame = true;
+    
+    // Apply visual styles
+    ctx.set_visuals(visuals);
+
+    // Create a simple frame without using private API
+    egui::Window::new("TSP Controls")
+        .default_width(320.0)
+        .resizable(false)
+        .show(ctx, |ui| {
+        // Add some spacing for better visual appeal
+        ui.add_space(5.0);
+
+        // Style the language selector
         ui.horizontal(|ui| {
-            ui.label(text.language);
+            ui.strong(text.language);  // Make label bold
             if ui.selectable_label(app_language.current == Language::English, "English").clicked() {
                 app_language.current = Language::English;
             }
@@ -65,7 +86,9 @@ pub fn ui_system(
                 app_language.current = Language::Portuguese;
             }
         });
-        
+
+        ui.add_space(10.0);
+
         ui.horizontal(|ui| {
             ui.add(egui::Slider::new(&mut points.count, 5..=100).text(text.points_slider));
 
@@ -182,8 +205,14 @@ pub fn ui_system(
             ui.label(text.best_distance.replace("{:.2}", &format!("{:.2}", best_path.distance)));
         }
 
+        // Add a separator with spacing
+        ui.add_space(5.0);
         ui.separator();
+        ui.add_space(5.0);
+
+        // Make headings more prominent
         ui.heading(text.algorithm_parameters);
+        ui.add_space(10.0);
 
         ui.add(egui::Slider::new(&mut aco_params.ant_count, 5..=100)
             .text(text.ant_count));

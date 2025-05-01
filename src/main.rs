@@ -7,13 +7,14 @@ mod resources;
 mod aco;
 mod systems;
 mod utils;
-mod ui; // Add this line to import the ui module
+mod ui;
+mod plugins;
 
 use components::*;
 use resources::*;
 use systems::*;
+use plugins::ui_plugin::UISetupPlugin;
 
-// Add these macros to help with the string formatting
 #[macro_export]
 macro_rules! format_str {
     ($format:expr, $($arg:expr),*) => {{
@@ -38,6 +39,7 @@ fn main() {
                     ..default()
                 }),
             EguiPlugin,
+            UISetupPlugin,
         ))
         .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.1)))
         .insert_resource(AcoState::default())
@@ -48,7 +50,7 @@ fn main() {
         .insert_resource(EntityTracker::default())
         .insert_resource(DistanceMatrix::default())
         .insert_resource(CandidateList::default())
-        .insert_resource(AppLanguage::default()) // Add language resource
+        .insert_resource(AppLanguage::default())
         .add_systems(Startup, setup)
         .add_systems(Update, (
             ui_system,
