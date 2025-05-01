@@ -21,6 +21,19 @@ struct EntityTracker {
     path_entities: Vec<Entity>,
 }
 
+#[derive(Resource)]
+struct DistanceMatrix {
+    distances: Vec<Vec<f32>>,
+}
+
+impl Default for DistanceMatrix {
+    fn default() -> Self {
+        Self {
+            distances: Vec::new(),
+        }
+    }
+}
+
 fn main() {
     App::new()
         .add_plugins((
@@ -46,6 +59,7 @@ fn main() {
         .insert_resource(AcoParameters::default())
         .insert_resource(UiState::default())
         .insert_resource(EntityTracker::default())
+        .insert_resource(DistanceMatrix::default())
         .add_systems(Startup, setup)
         .add_systems(Update, (
             ui_system,
@@ -55,6 +69,7 @@ fn main() {
             update_points_visualization,
             update_path_visualization,
             run_aco_algorithm,
+            update_distance_matrix,
         ))
         .run();
 }
@@ -147,12 +162,12 @@ impl Ant {
 
     fn construct_solution(
         &mut self,
-        points: &[Vec2],
+        distances: &[Vec<f32>],
         pheromones: &[Vec<f32>],
         rng: &mut ThreadRng,
         params: &AcoParameters,
     ) {
-        let point_count = points.len();
+        let point_count = distances.len();
         self.visited.fill(false);
         self.path.clear();
         self.distance = 0.0;
@@ -163,9 +178,9 @@ impl Ant {
 
         while self.path.len() < point_count {
             let current = *self.path.last().unwrap();
-            let next = self.select_next_city(current, points, pheromones, rng, params);
+            let next = self.select_next_city(current, pheromones, rng, params, distances);
 
-            let distance = points[current].distance(points[next]);
+            let distance = distances[current][next];
             self.distance += distance;
 
             self.path.push(next);
@@ -174,25 +189,25 @@ impl Ant {
 
         let first = self.path[0];
         let last = self.path[point_count - 1];
-        self.distance += points[last].distance(points[first]);
+        self.distance += distances[last][first];
     }
 
     fn select_next_city(
         &self,
         current: usize,
-        points: &[Vec2],
         pheromones: &[Vec<f32>],
         rng: &mut ThreadRng,
         params: &AcoParameters,
+        distances: &[Vec<f32>],
     ) -> usize {
-        let point_count = points.len();
+        let point_count = distances.len();
 
         let mut total_prob = 0.0;
         let mut probabilities = vec![0.0; point_count];
 
         for i in 0..point_count {
             if !self.visited[i] {
-                let distance = points[current].distance(points[i]);
+                let distance = distances[current][i];
                 let pheromone = pheromones[current][i];
 
                 let distance_factor = if distance < 0.0001 { 1000.0 } else { 1.0 / distance };
@@ -246,16 +261,16 @@ fn safe_despawn(commands: &mut Commands, entity: Entity) {
     }
 }
 
-fn calculate_distance(path: &[usize], points: &[Vec2]) -> f32 {
-    let mut distance = 0.0;
+fn calculate_distance(path: &[usize], distances: &[Vec<f32>]) -> f32 {
+    let mut total_distance = 0.0;
     let len = path.len();
 
     for i in 0..len - 1 {
-        distance += points[path[i]].distance(points[path[i + 1]]);
+        total_distance += distances[path[i]][path[i + 1]];
     }
 
-    distance += points[path[len - 1]].distance(points[path[0]]);
-    distance
+    total_distance += distances[path[len - 1]][path[0]];
+    total_distance
 }
 
 fn setup(
@@ -540,13 +555,34 @@ fn update_path_visualization(
     }
 }
 
+fn update_distance_matrix(
+    points: Res<Points>,
+    mut distance_matrix: ResMut<DistanceMatrix>,
+) {
+    if points.is_changed() && !points.positions.is_empty() {
+        let n = points.positions.len();
+        let mut distances = vec![vec![0.0; n]; n];
+        
+        for i in 0..n {
+            for j in (i+1)..n {
+                let dist = points.positions[i].distance(points.positions[j]);
+                distances[i][j] = dist;
+                distances[j][i] = dist;
+            }
+        }
+        
+        distance_matrix.distances = distances;
+    }
+}
+
 fn run_aco_algorithm(
     mut aco_state: ResMut<AcoState>,
     points: Res<Points>,
     mut best_path: ResMut<BestPath>,
     aco_params: Res<AcoParameters>,
+    distance_matrix: Res<DistanceMatrix>,
 ) {
-    if !aco_state.running || points.positions.is_empty() {
+    if !aco_state.running || points.positions.is_empty() || distance_matrix.distances.is_empty() {
         return;
     }
 
@@ -581,23 +617,32 @@ fn run_aco_algorithm(
             
             while ant.path.len() < n {
                 let current = *ant.path.last().unwrap();
-                let next = ant.select_next_city(current, &points.positions, &aco_state.pheromones, &mut local_rng, &aco_params);
+                let next = ant.select_next_city(
+                    current, 
+                    &aco_state.pheromones, 
+                    &mut local_rng, 
+                    &aco_params,
+                    &distance_matrix.distances
+                );
                 
-                let distance = points.positions[current].distance(points.positions[next]);
-                ant.distance += distance;
-                
+                ant.distance += distance_matrix.distances[current][next];
                 ant.path.push(next);
                 ant.visited[next] = true;
             }
             
             let first = ant.path[0];
             let last = ant.path[n - 1];
-            ant.distance += points.positions[last].distance(points.positions[first]);
+            ant.distance += distance_matrix.distances[last][first];
         });
     } else {
         ants.par_iter_mut().for_each(|ant| {
             let mut local_rng = thread_rng();
-            ant.construct_solution(&points.positions, &aco_state.pheromones, &mut local_rng, &aco_params);
+            ant.construct_solution(
+                &distance_matrix.distances, 
+                &aco_state.pheromones, 
+                &mut local_rng, 
+                &aco_params
+            );
         });
     }
 
@@ -608,7 +653,7 @@ fn run_aco_algorithm(
         }
     }
 
-    let new_best_distance = calculate_distance(&iteration_best_ant.path, &points.positions);
+    let new_best_distance = calculate_distance(&iteration_best_ant.path, &distance_matrix.distances);
     if new_best_distance < best_path.distance {
         best_path.path = iteration_best_ant.path.clone();
         best_path.distance = new_best_distance;
