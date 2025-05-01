@@ -14,6 +14,8 @@ const DEFAULT_ALPHA: f32 = 1.0; // Pheromone importance
 const DEFAULT_BETA: f32 = 2.0;  // Distance importance
 const DEFAULT_RHO: f32 = 0.5;   // Pheromone evaporation rate
 const DEFAULT_Q: f32 = 100.0;   // Pheromone deposit factor
+const CANDIDATE_LIST_SIZE: usize = 10; // Consider only the N closest neighbors
+const MAX_ITERATIONS_WITHOUT_IMPROVEMENT: u32 = 50; // Early stopping criterion
 
 #[derive(Default, Resource)]
 struct EntityTracker {
@@ -30,6 +32,19 @@ impl Default for DistanceMatrix {
     fn default() -> Self {
         Self {
             distances: Vec::new(),
+        }
+    }
+}
+
+#[derive(Resource)]
+struct CandidateList {
+    nearest_neighbors: Vec<Vec<usize>>,
+}
+
+impl Default for CandidateList {
+    fn default() -> Self {
+        Self {
+            nearest_neighbors: Vec::new(),
         }
     }
 }
@@ -60,6 +75,7 @@ fn main() {
         .insert_resource(UiState::default())
         .insert_resource(EntityTracker::default())
         .insert_resource(DistanceMatrix::default())
+        .insert_resource(CandidateList::default())
         .add_systems(Startup, setup)
         .add_systems(Update, (
             ui_system,
@@ -70,6 +86,7 @@ fn main() {
             update_path_visualization,
             run_aco_algorithm,
             update_distance_matrix,
+            update_candidate_lists,
         ))
         .run();
 }
@@ -84,6 +101,7 @@ struct AcoState {
     elapsed_time: Duration,
     iterations: u32,
     pheromones: Vec<Vec<f32>>,
+    iterations_since_improvement: u32,
 }
 
 #[derive(Default, Resource)]
@@ -235,6 +253,82 @@ impl Ant {
 
         unreachable!("Should have found an unvisited city")
     }
+
+    fn select_next_city_with_candidates(
+        &self,
+        current: usize,
+        pheromones: &[Vec<f32>],
+        rng: &mut ThreadRng,
+        params: &AcoParameters,
+        distances: &[Vec<f32>],
+        candidate_lists: &[Vec<usize>],
+    ) -> usize {
+        let candidates = &candidate_lists[current];
+        let unvisited_candidates: Vec<usize> = candidates.iter()
+            .filter(|&&city| !self.visited[city])
+            .copied()
+            .collect();
+
+        if !unvisited_candidates.is_empty() {
+            let mut total_prob = 0.0;
+            let mut probabilities = vec![0.0; unvisited_candidates.len()];
+
+            for (i, &city) in unvisited_candidates.iter().enumerate() {
+                let distance = distances[current][city];
+                let pheromone = pheromones[current][city];
+
+                let distance_factor = if distance < 0.0001 { 1000.0 } else { 1.0 / distance };
+                probabilities[i] = pheromone.powf(params.alpha) * distance_factor.powf(params.beta);
+                total_prob += probabilities[i];
+            }
+
+            if total_prob > 0.0 {
+                let mut choice = rng.gen::<f32>() * total_prob;
+                for (i, &city) in unvisited_candidates.iter().enumerate() {
+                    choice -= probabilities[i];
+                    if choice <= 0.0 {
+                        return city;
+                    }
+                }
+            }
+        }
+
+        self.select_next_city(current, pheromones, rng, params, distances)
+    }
+}
+
+fn apply_2opt(path: &mut Vec<usize>, distances: &[Vec<f32>]) -> f32 {
+    let n = path.len();
+    let mut improved = true;
+    let mut distance = calculate_distance(path, distances);
+
+    while improved {
+        improved = false;
+
+        for i in 0..n - 2 {
+            for j in i + 2..n {
+                let current_distance =
+                    distances[path[i]][path[i + 1]] +
+                    distances[path[j]][path[(j + 1) % n]];
+
+                let new_distance =
+                    distances[path[i]][path[j]] +
+                    distances[path[i + 1]][path[(j + 1) % n]];
+
+                if new_distance < current_distance {
+                    path[i + 1..=j].reverse();
+                    distance = calculate_distance(path, distances);
+                    improved = true;
+                    break;
+                }
+            }
+            if improved {
+                break;
+            }
+        }
+    }
+
+    distance
 }
 
 fn safe_despawn_collection(
@@ -323,6 +417,9 @@ fn ui_system(
             ui.add(egui::Slider::new(&mut points.count, 5..=100).text("Points"));
 
             if ui.button("Generate Points").clicked() {
+                safe_despawn_collection(&mut commands, &mut entity_tracker.point_entities);
+                safe_despawn_collection(&mut commands, &mut entity_tracker.path_entities);
+
                 for entity in point_markers.iter() {
                     safe_despawn(&mut commands, entity);
                 }
@@ -351,6 +448,7 @@ fn ui_system(
 
                 aco_state.running = false;
                 aco_state.iterations = 0;
+                aco_state.iterations_since_improvement = 0;
                 aco_state.start_time = None;
                 aco_state.elapsed_time = Duration::from_secs(0);
                 best_path.path.clear();
@@ -575,14 +673,72 @@ fn update_distance_matrix(
     }
 }
 
+fn update_candidate_lists(
+    points: Res<Points>,
+    distance_matrix: Res<DistanceMatrix>,
+    mut candidate_lists: ResMut<CandidateList>,
+) {
+    if points.is_changed() && !points.positions.is_empty() && !distance_matrix.distances.is_empty() {
+        let n = points.positions.len();
+        
+        // Safety check - need at least 2 points to create candidate lists
+        if n < 2 {
+            candidate_lists.nearest_neighbors = Vec::new();
+            return;
+        }
+        
+        let mut nearest_neighbors = vec![Vec::with_capacity(CANDIDATE_LIST_SIZE.min(n-1)); n];
+        
+        for i in 0..n {
+            // Create a vector of (index, distance) pairs - skip self connections (j != i)
+            let mut distances: Vec<(usize, f32)> = (0..n)
+                .filter(|&j| j != i)
+                .map(|j| (j, distance_matrix.distances[i][j]))
+                .collect();
+                
+            // Sort by distance (shortest first)
+            distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+            
+            // Fix: Make sure we don't take more elements than are available
+            let available = distances.len();
+            let to_take = CANDIDATE_LIST_SIZE.min(available);
+            
+            // Fix: Use first element of tuple directly without pattern matching
+            nearest_neighbors[i] = distances
+                .into_iter() // Use into_iter() instead of iter() to consume elements directly
+                .take(to_take)
+                .map(|(idx, _)| idx) // No need for dereferencing when using into_iter()
+                .collect();
+        }
+        
+        candidate_lists.nearest_neighbors = nearest_neighbors;
+    }
+}
+
 fn run_aco_algorithm(
     mut aco_state: ResMut<AcoState>,
     points: Res<Points>,
     mut best_path: ResMut<BestPath>,
     aco_params: Res<AcoParameters>,
     distance_matrix: Res<DistanceMatrix>,
+    candidate_lists: Res<CandidateList>,
 ) {
     if !aco_state.running || points.positions.is_empty() || distance_matrix.distances.is_empty() {
+        return;
+    }
+
+    let n = points.positions.len();
+    
+    if aco_state.pheromones.len() != n {
+        aco_state.pheromones = vec![vec![1.0; n]; n];
+    }
+    
+    if aco_state.iterations_since_improvement > MAX_ITERATIONS_WITHOUT_IMPROVEMENT {
+        aco_state.running = false;
+        if let Some(start_time) = aco_state.start_time {
+            aco_state.elapsed_time += Instant::now().duration_since(start_time);
+            aco_state.start_time = None;
+        }
         return;
     }
 
@@ -596,8 +752,8 @@ fn run_aco_algorithm(
     }
 
     aco_state.iterations += 1;
-    let n = points.positions.len();
-
+    aco_state.iterations_since_improvement += 1;
+    
     let mut ants: Vec<Ant> = (0..aco_params.ant_count).map(|_| Ant::new(n)).collect();
 
     if aco_params.ant_count <= n {
@@ -607,7 +763,12 @@ fn run_aco_algorithm(
 
         ants.par_iter_mut().enumerate().for_each(|(i, ant)| {
             let mut local_rng = thread_rng();
-            let start = starting_points[i];
+            let start = if i < starting_points.len() { 
+                starting_points[i] 
+            } else {
+                starting_points[i % starting_points.len()]
+            };
+            
             ant.visited.fill(false);
             ant.path.clear();
             ant.distance = 0.0;
@@ -617,13 +778,24 @@ fn run_aco_algorithm(
             
             while ant.path.len() < n {
                 let current = *ant.path.last().unwrap();
-                let next = ant.select_next_city(
-                    current, 
-                    &aco_state.pheromones, 
-                    &mut local_rng, 
-                    &aco_params,
-                    &distance_matrix.distances
-                );
+                let next = if !candidate_lists.nearest_neighbors.is_empty() {
+                    ant.select_next_city_with_candidates(
+                        current, 
+                        &aco_state.pheromones, 
+                        &mut local_rng, 
+                        &aco_params,
+                        &distance_matrix.distances,
+                        &candidate_lists.nearest_neighbors
+                    )
+                } else {
+                    ant.select_next_city(
+                        current, 
+                        &aco_state.pheromones, 
+                        &mut local_rng, 
+                        &aco_params,
+                        &distance_matrix.distances
+                    )
+                };
                 
                 ant.distance += distance_matrix.distances[current][next];
                 ant.path.push(next);
@@ -653,10 +825,13 @@ fn run_aco_algorithm(
         }
     }
 
-    let new_best_distance = calculate_distance(&iteration_best_ant.path, &distance_matrix.distances);
-    if new_best_distance < best_path.distance {
-        best_path.path = iteration_best_ant.path.clone();
-        best_path.distance = new_best_distance;
+    let mut improved_path = iteration_best_ant.path.clone();
+    let improved_distance = apply_2opt(&mut improved_path, &distance_matrix.distances);
+    
+    if improved_distance < best_path.distance {
+        best_path.path = improved_path;
+        best_path.distance = improved_distance;
+        aco_state.iterations_since_improvement = 0;
     }
 
     for i in 0..n {
@@ -679,4 +854,17 @@ fn run_aco_algorithm(
         aco_state.pheromones[from][to] += pheromone_amount;
         aco_state.pheromones[to][from] += pheromone_amount;
     }
+
+    let best_pheromone = 2.0 * aco_params.q / best_path.distance;
+    for i in 0..best_path.path.len() - 1 {
+        let from = best_path.path[i];
+        let to = best_path.path[i + 1];
+        aco_state.pheromones[from][to] += best_pheromone;
+        aco_state.pheromones[to][from] += best_pheromone;
+    }
+
+    let from = best_path.path[n - 1];
+    let to = best_path.path[0];
+    aco_state.pheromones[from][to] += best_pheromone;
+    aco_state.pheromones[to][from] += best_pheromone;
 }
