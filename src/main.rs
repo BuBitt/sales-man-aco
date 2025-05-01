@@ -345,6 +345,17 @@ fn ui_system(
                 aco_state.pheromones = vec![vec![1.0; n]; n];
             }
 
+            let button_text = if aco_state.running { "Stop" } else { "Start" };
+            if ui.button(button_text).clicked() {
+                aco_state.running = !aco_state.running;
+                if aco_state.running {
+                    aco_state.start_time = Some(Instant::now());
+                } else if let Some(start_time) = aco_state.start_time {
+                    aco_state.elapsed_time += Instant::now().duration_since(start_time);
+                    aco_state.start_time = None;
+                }
+            }
+
             ui.label(format!("Positions count: {}", points.positions.len()));
         });
 
