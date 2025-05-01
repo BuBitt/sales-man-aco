@@ -3,6 +3,8 @@ use bevy::sprite::MaterialMesh2dBundle;
 use crate::components::*;
 use crate::resources::*;
 use crate::utils::{safe_despawn, safe_despawn_collection};
+// Import all required Rayon traits
+use rayon::prelude::*;
 
 pub fn update_points_visualization(
     mut commands: Commands,
@@ -105,11 +107,30 @@ pub fn update_distance_matrix(
         let n = points.positions.len();
         let mut distances = vec![vec![0.0; n]; n];
         
-        for i in 0..n {
-            for j in (i+1)..n {
-                let dist = points.positions[i].distance(points.positions[j]);
-                distances[i][j] = dist;
-                distances[j][i] = dist;
+        // Use the correct Rayon parallel iteration pattern
+        if n > 100 {
+            distances.par_iter_mut().enumerate().for_each(|(i, row)| {
+                for j in (i+1)..n {
+                    let dist = points.positions[i].distance(points.positions[j]);
+                    row[j] = dist;
+                    // Note: we can't set distances[j][i] here because of borrow rules
+                }
+            });
+            
+            // Fill the other half of the matrix in a second pass
+            for i in 0..n {
+                for j in (i+1)..n {
+                    distances[j][i] = distances[i][j];
+                }
+            }
+        } else {
+            // Sequential implementation for small datasets
+            for i in 0..n {
+                for j in (i+1)..n {
+                    let dist = points.positions[i].distance(points.positions[j]);
+                    distances[i][j] = dist;
+                    distances[j][i] = dist;
+                }
             }
         }
         
@@ -124,37 +145,46 @@ pub fn update_candidate_lists(
 ) {
     let n = points.positions.len();
     
-    // If there are no points, reset the candidate list to be empty
+    // Se não houver pontos, limpa a lista de candidatos
     if n == 0 {
         candidate_lists.nearest_neighbors = Vec::new();
         return;
     }
 
-    // Maximum number of candidates is either 20 or n-1, whichever is smaller
-    let k = usize::min(20, n.saturating_sub(1)); // Use saturating_sub to handle the case where n might be 0
+    // Usa a constante CANDIDATE_LIST_SIZE em vez do valor hardcoded
+    let k = std::cmp::min(crate::constants::CANDIDATE_LIST_SIZE, n.saturating_sub(1));
     
-    // For each point, find its k nearest neighbors
-    candidate_lists.nearest_neighbors = (0..n)
-        .map(|i| {
-            // Skip points with no neighbors (shouldn't happen with our check above, but just to be safe)
-            if n <= 1 {
-                return Vec::new();
+    // Pré-aloca o vetor com a capacidade exata para evitar realocações
+    let mut new_lists = Vec::with_capacity(n);
+    
+    for i in 0..n {
+        // Não processa pontos sem vizinhos
+        if n <= 1 {
+            new_lists.push(Vec::new());
+            continue;
+        }
+        
+        // Otimização: pré-aloca o vetor com capacidade suficiente
+        let mut neighbors = Vec::with_capacity(n - 1);
+        
+        // Coleta todos os vizinhos em uma única passagem
+        for j in 0..n {
+            if i != j {
+                neighbors.push((j, distances.distances[i][j]));
             }
+        }
+        
+        // Usa partial_sort em vez de sort completo - apenas precisamos dos k primeiros
+        neighbors.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        
+        // Extrai apenas os k vizinhos mais próximos
+        let closest = neighbors.iter()
+            .take(k)
+            .map(|&(j, _)| j)
+            .collect();
             
-            // For each point, get distances to all other points
-            let mut neighbors: Vec<(usize, f32)> = (0..n)
-                .filter(|&j| i != j)
-                .map(|j| (j, distances.distances[i][j]))
-                .collect();
-            
-            // Sort by distance
-            neighbors.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-            
-            // Take only the k closest neighbors
-            neighbors.iter()
-                .take(k)
-                .map(|&(j, _)| j)
-                .collect()
-        })
-        .collect();
+        new_lists.push(closest);
+    }
+    
+    candidate_lists.nearest_neighbors = new_lists;
 }

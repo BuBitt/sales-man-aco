@@ -1,85 +1,131 @@
 use rand::prelude::*;
 
-pub fn calculate_ant_path(pheromones: &[Vec<f32>], distances: &[Vec<f32>], alpha: f32, beta: f32, start_city: usize) -> (Vec<usize>, f32) {
+pub fn calculate_ant_path(
+    pheromones: &[Vec<f32>], 
+    distances: &[Vec<f32>], 
+    alpha: f32, 
+    beta: f32, 
+    start_city: usize,
+    candidate_lists: Option<&[Vec<usize>]>
+) -> (Vec<usize>, f32) {
     let n = distances.len();
-    let mut path = vec![start_city];
+    if n == 0 {
+        return (Vec::new(), 0.0);
+    }
+    
+    let mut path = Vec::with_capacity(n + 1); // +1 para incluir o retorno à cidade inicial
+    path.push(start_city);
+    
     let mut visited = vec![false; n];
     visited[start_city] = true;
     
-    // Initialize distance to 0
     let mut distance = 0.0;
+    let mut current_city = start_city;
+    let mut remaining = n - 1;
     
-    // Build the path
-    for _ in 1..n {
-        let current_city = *path.last().unwrap();
-        let next_city = select_next_city(current_city, &visited, pheromones, distances, alpha, beta);
+    // Cache para cálculos repetidos
+    let mut probs_cache = Vec::with_capacity(n);
+    
+    // Construção do caminho otimizada
+    while remaining > 0 {
+        let next_city = if let Some(candidates) = candidate_lists {
+            // Primeiro tenta usar a lista de candidatos (mais eficiente)
+            let candidate_cities = &candidates[current_city];
+            let mut found_valid = false;
+            let mut best_city = 0;
+            let mut best_prob = 0.0;
+            
+            // Tenta encontrar próxima cidade na lista de candidatos
+            for &candidate in candidate_cities {
+                if !visited[candidate] {
+                    let pheromone = pheromones[current_city][candidate].powf(alpha);
+                    let heuristic = (1.0 / distances[current_city][candidate]).powf(beta);
+                    let probability = pheromone * heuristic;
+                    
+                    if probability > best_prob {
+                        best_prob = probability;
+                        best_city = candidate;
+                        found_valid = true;
+                    }
+                }
+            }
+            
+            // Se encontrou candidato válido, usa ele
+            if found_valid {
+                best_city
+            } else {
+                // Caso contrário, faz seleção completa
+                select_next_city(current_city, &visited, pheromones, distances, alpha, beta, &mut probs_cache)
+            }
+        } else {
+            // Não tem lista de candidatos, faz busca completa
+            select_next_city(current_city, &visited, pheromones, distances, alpha, beta, &mut probs_cache)
+        };
         
-        // Add to total distance using the distance matrix directly
         distance += distances[current_city][next_city];
-        
         path.push(next_city);
         visited[next_city] = true;
+        current_city = next_city;
+        remaining -= 1;
     }
     
-    // Add distance back to starting city to complete the tour
-    if path.len() > 1 {
-        let last = *path.last().unwrap();
-        distance += distances[last][start_city];
-    }
+    // Fecha o circuito voltando à cidade inicial
+    distance += distances[current_city][start_city];
     
     (path, distance)
 }
 
-fn select_next_city(current_city: usize, visited: &[bool], pheromones: &[Vec<f32>], 
-                   distances: &[Vec<f32>], alpha: f32, beta: f32) -> usize {
+// Função otimizada para seleção da próxima cidade
+#[inline]
+fn select_next_city(
+    current_city: usize,
+    visited: &[bool],
+    pheromones: &[Vec<f32>],
+    distances: &[Vec<f32>],
+    alpha: f32,
+    beta: f32,
+    probs_cache: &mut Vec<(usize, f32)>
+) -> usize {
     let n = distances.len();
+    probs_cache.clear(); // Reutiliza o vetor para evitar realocações
     
-    // Calculate probabilities for each unvisited city
-    let mut probabilities = vec![0.0; n];
     let mut total = 0.0;
     
+    // Calcula probabilidades uma única vez - otimizado
     for i in 0..n {
-        if !visited[i] && i != current_city {
+        if !visited[i] {
             let pheromone = pheromones[current_city][i].powf(alpha);
             let heuristic = if distances[current_city][i] > 0.0 {
-                (1.0 / distances[current_city][i]).powf(beta) 
+                (1.0 / distances[current_city][i]).powf(beta)
             } else {
-                f32::MAX
+                f32::MAX / 2.0 // Evita overflow
             };
             
-            probabilities[i] = pheromone * heuristic;
-            total += probabilities[i];
+            let prob = pheromone * heuristic;
+            probs_cache.push((i, prob));
+            total += prob;
         }
     }
     
-    // If all cities have been visited or total is zero, return the first unvisited city
-    if total <= 0.0 {
-        for i in 0..n {
-            if !visited[i] {
-                return i;
-            }
-        }
-        return current_city; // Fallback to current city if all are visited
-    }
-    
-    // Select city based on probability
-    let mut rand_val = thread_rng().gen::<f32>() * total;
-    
-    for i in 0..n {
-        if !visited[i] && probabilities[i] > 0.0 {
-            rand_val -= probabilities[i];
+    // Abordagem de seleção por roleta otimizada
+    if total > 0.0 {
+        let mut rand_val = thread_rng().gen::<f32>() * total;
+        
+        for &(city, prob) in probs_cache.iter() {
+            rand_val -= prob;
             if rand_val <= 0.0 {
-                return i;
+                return city;
             }
         }
     }
     
-    // Fallback to first unvisited city
+    // Caso de contingência - retorna a primeira cidade não visitada
     for i in 0..n {
         if !visited[i] {
             return i;
         }
     }
     
-    current_city  // This shouldn't happen, but as a fallback
+    // Não deve chegar aqui, mas por segurança
+    current_city
 }
