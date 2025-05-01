@@ -1,0 +1,15 @@
+[package]
+name = "ts"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = { version = "0.14", features = ["dynamic_linking"] }
+bevy_egui = "0.28"
+rand = "0.8"
+rayon = "1.10"
+ndarray = "0.16"
+wgpu = "0.20"
+bytemuck = "1.18"
+log = "0.4"
+env_logger = "0.11"
