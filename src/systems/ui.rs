@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use std::fmt::Write;
 use crate::components::*;
 use crate::resources::*;
-use crate::ui::language::{get_text, UiText};
+use crate::ui::language::get_text;
 use crate::utils::{safe_despawn, safe_despawn_collection};
 
 // Update this utility function to estimate standard algorithm time more accurately
@@ -93,6 +93,7 @@ pub fn ui_system(
             ui.add(egui::Slider::new(&mut points.count, 5..=100).text(text.points_slider));
 
             if ui.button(text.generate_points).clicked() {
+                // Clear existing entities
                 safe_despawn_collection(&mut commands, &mut entity_tracker.point_entities);
                 safe_despawn_collection(&mut commands, &mut entity_tracker.path_entities);
 
@@ -111,6 +112,7 @@ pub fn ui_system(
                 entity_tracker.point_entities.clear();
                 entity_tracker.path_entities.clear();
 
+                // Generate new points
                 let count = points.count.max(5);
                 points.count = count;
 
@@ -122,6 +124,7 @@ pub fn ui_system(
                     ))
                     .collect();
 
+                // Reset algorithm state
                 aco_state.running = false;
                 aco_state.iterations = 0;
                 aco_state.iterations_since_improvement = 0;
@@ -135,13 +138,53 @@ pub fn ui_system(
             }
 
             let button_text = if aco_state.running { text.stop } else { text.start };
-            if ui.button(button_text).clicked() {
-                aco_state.running = !aco_state.running;
+            let mut button_response = ui.button(button_text);
+            
+            // Add tooltip for the start button
+            if !aco_state.running && !points.positions.is_empty() {
+                let tooltip = if app_language.current == Language::English {
+                    "Press to start/restart the algorithm with current parameters on the same points"
+                } else {
+                    "Pressione para iniciar/reiniciar o algoritmo com os parâmetros atuais nos mesmos pontos"
+                };
+                button_response = button_response.on_hover_text(tooltip);
+            }
+            
+            if button_response.clicked() {
                 if aco_state.running {
-                    aco_state.start_time = Some(Instant::now());
-                } else if let Some(start_time) = aco_state.start_time {
-                    aco_state.elapsed_time += Instant::now().duration_since(start_time);
-                    aco_state.start_time = None;
+                    // Stop the algorithm
+                    aco_state.running = false;
+                    if let Some(start_time) = aco_state.start_time {
+                        aco_state.elapsed_time += Instant::now().duration_since(start_time);
+                        aco_state.start_time = None;
+                    }
+                } else {
+                    // Start or restart the algorithm
+                    if !points.positions.is_empty() {
+                        // If we're restarting with the same points, reset algorithm state
+                        // but keep the point positions
+                        aco_state.iterations = 0;
+                        aco_state.iterations_since_improvement = 0;
+                        aco_state.elapsed_time = Duration::from_secs(0);
+                        
+                        // Clear previous best path
+                        best_path.path.clear();
+                        best_path.distance = f32::INFINITY;
+                        
+                        // Reset pheromones
+                        let n = points.positions.len();
+                        aco_state.pheromones = vec![vec![1.0; n]; n];
+                        
+                        // Clear path visualization
+                        safe_despawn_collection(&mut commands, &mut entity_tracker.path_entities);
+                        for entity in best_path_lines.iter() {
+                            safe_despawn(&mut commands, entity);
+                        }
+                        
+                        // Start the algorithm
+                        aco_state.running = true;
+                        aco_state.start_time = Some(Instant::now());
+                    }
                 }
             }
         });
@@ -163,7 +206,6 @@ pub fn ui_system(
         write!(elapsed_str, "{:02}:{:02}.{:03}", secs / 60, secs % 60, millis).unwrap();
         ui.label(text.elapsed_time.replace("{:02}:{:02}.{:03}", &elapsed_str));
 
-        // Format time more intelligently for very large durations
         if !points.positions.is_empty() {
             let standard_time = estimate_standard_algorithm_time(points.positions.len());
             

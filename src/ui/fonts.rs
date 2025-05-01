@@ -1,4 +1,3 @@
-use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 
 /// Sets up custom fonts for the UI

@@ -27,6 +27,7 @@ pub struct UiText {
     pub q_factor: &'static str,
     pub reset_parameters: &'static str,
     pub language: &'static str,
+    pub start_tooltip: &'static str,
 }
 
 pub fn get_text(language: Language) -> UiText {
@@ -58,6 +59,7 @@ pub fn get_text(language: Language) -> UiText {
             q_factor: "Q (pheromone deposit)",
             reset_parameters: "Reset Parameters",
             language: "Language",
+            start_tooltip: "Press to start/restart the algorithm with current parameters on the same points",
         },
         Language::Portuguese => UiText {
             points_slider: "Pontos",
@@ -86,6 +88,7 @@ pub fn get_text(language: Language) -> UiText {
             q_factor: "Q (depósito de feromônio)",
             reset_parameters: "Redefinir Parâmetros",
             language: "Idioma",
+            start_tooltip: "Pressione para iniciar/reiniciar o algoritmo com os parâmetros atuais nos mesmos pontos",
         },
     }
 }
