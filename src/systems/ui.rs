@@ -6,6 +6,29 @@ use crate::components::*;
 use crate::resources::*;
 use crate::utils::{safe_despawn, safe_despawn_collection};
 
+// Update this utility function to estimate standard algorithm time more accurately
+fn estimate_standard_algorithm_time(point_count: usize) -> Duration {
+    // For TSP, an exact algorithm like Held-Karp has O(n²·2ⁿ) complexity
+    let n = point_count as f64;
+    
+    // Avoid overflow for large n by using a piecewise approach
+    let estimated_seconds = if point_count <= 10 {
+        // For small n, calculation is exact and quick
+        let complexity = n * n * (2.0_f64.powf(n));
+        let constant_factor = 0.000000001; // Nanoseconds per operation
+        complexity * constant_factor
+    } else if point_count <= 20 {
+        // For medium n, use exponential growth model
+        0.001 * (2.5_f64.powf(n))
+    } else {
+        // For large n, the time becomes astronomical - cap it reasonably
+        // This represents "beyond practical computation"
+        3600.0 * 24.0 * 365.0 // One year in seconds
+    };
+    
+    Duration::from_secs_f64(estimated_seconds)
+}
+
 pub fn handle_input(
     mut ui_state: ResMut<UiState>,
     mut contexts: EguiContexts,
@@ -94,6 +117,38 @@ pub fn ui_system(
         let secs = total_time.as_secs();
         let millis = total_time.subsec_millis();
         ui.label(format!("Elapsed: {:02}:{:02}.{:03}", secs / 60, secs % 60, millis));
+
+        // Format time more intelligently for very large durations
+        if !points.positions.is_empty() {
+            let standard_time = estimate_standard_algorithm_time(points.positions.len());
+            
+            // More intelligent formatting for different time scales
+            let time_display = if standard_time.as_secs() > 86400 * 365 {
+                "over a year (impractical)".to_string()
+            } else if standard_time.as_secs() > 86400 * 30 {
+                format!("{:.1} months", standard_time.as_secs() as f64 / (86400.0 * 30.0))
+            } else if standard_time.as_secs() > 86400 {
+                format!("{:.1} days", standard_time.as_secs() as f64 / 86400.0)
+            } else if standard_time.as_secs() > 3600 {
+                format!("{:.1} hours", standard_time.as_secs() as f64 / 3600.0)
+            } else if standard_time.as_secs() > 60 {
+                format!("{:.1} minutes", standard_time.as_secs() as f64 / 60.0)
+            } else {
+                let secs = standard_time.as_secs();
+                let millis = standard_time.subsec_millis();
+                format!("{}.{:03} seconds", secs, millis)
+            };
+            
+            ui.label(format!("Estimated time for standard algorithm: {}", time_display));
+                
+            // Add comparison if we have current time and it makes sense
+            if total_time.as_secs_f64() > 0.1 && standard_time.as_secs_f64() > 0.1 {
+                let speedup = standard_time.as_secs_f64() / total_time.as_secs_f64();
+                if speedup > 1.0 {
+                    ui.label(format!("ACO is approximately {:.1}x faster than standard approach", speedup));
+                }
+            }
+        }
 
         ui.label(format!("Iterations: {}", aco_state.iterations));
 
