@@ -6,26 +6,19 @@ use std::fmt::Write;
 use crate::components::*;
 use crate::resources::*;
 use crate::ui::language::get_text;
-use crate::utils::{safe_despawn, safe_despawn_collection};
+use crate::utils::safe_despawn;
 
-// Update this utility function to estimate standard algorithm time more accurately
 fn estimate_standard_algorithm_time(point_count: usize) -> Duration {
-    // For TSP, an exact algorithm like Held-Karp has O(n²·2ⁿ) complexity
     let n = point_count as f64;
     
-    // Avoid overflow for large n by using a piecewise approach
     let estimated_seconds = if point_count <= 10 {
-        // For small n, calculation is exact and quick
         let complexity = n * n * (2.0_f64.powf(n));
-        let constant_factor = 0.000000001; // Nanoseconds per operation
+        let constant_factor = 0.000000001;
         complexity * constant_factor
     } else if point_count <= 20 {
-        // For medium n, use exponential growth model
         0.001 * (2.5_f64.powf(n))
     } else {
-        // For large n, the time becomes astronomical - cap it reasonably
-        // This represents "beyond practical computation"
-        3600.0 * 24.0 * 365.0 // One year in seconds
+        3600.0 * 24.0 * 365.0
     };
     
     Duration::from_secs_f64(estimated_seconds)
@@ -51,13 +44,10 @@ pub fn ui_system(
     path_lines: Query<Entity, With<PathLine>>,
     best_path_lines: Query<Entity, With<BestPathLine>>,
 ) {
-    // Get the appropriate text based on the current language
     let text = get_text(app_language.current);
     
-    // Enhance the UI with better styling
     let ctx = contexts.ctx_mut();
     
-    // Use custom visuals for the entire UI - need to clone first
     let mut visuals = ctx.style().visuals.clone();
     visuals.widgets.noninteractive.fg_stroke.width = 1.0;
     visuals.widgets.inactive.fg_stroke.width = 1.0;
@@ -65,20 +55,16 @@ pub fn ui_system(
     visuals.widgets.active.fg_stroke.width = 1.0;
     visuals.button_frame = true;
     
-    // Apply visual styles
     ctx.set_visuals(visuals);
 
-    // Create a simple frame without using private API
     egui::Window::new("TSP Controls")
         .default_width(320.0)
         .resizable(false)
         .show(ctx, |ui| {
-        // Add some spacing for better visual appeal
         ui.add_space(5.0);
 
-        // Style the language selector
         ui.horizontal(|ui| {
-            ui.strong(text.language);  // Make label bold
+            ui.strong(text.language);
             if ui.selectable_label(app_language.current == Language::English, "English").clicked() {
                 app_language.current = Language::English;
             }
@@ -93,10 +79,9 @@ pub fn ui_system(
             ui.add(egui::Slider::new(&mut points.count, 5..=100).text(text.points_slider));
 
             if ui.button(text.generate_points).clicked() {
-                // Clear existing entities
-                safe_despawn_collection(&mut commands, &mut entity_tracker.point_entities);
-                safe_despawn_collection(&mut commands, &mut entity_tracker.path_entities);
-
+                entity_tracker.point_entities.clear();
+                entity_tracker.path_entities.clear();
+                
                 for entity in point_markers.iter() {
                     safe_despawn(&mut commands, entity);
                 }
@@ -109,10 +94,6 @@ pub fn ui_system(
                     safe_despawn(&mut commands, entity);
                 }
 
-                entity_tracker.point_entities.clear();
-                entity_tracker.path_entities.clear();
-
-                // Generate new points
                 let count = points.count.max(5);
                 points.count = count;
 
@@ -124,7 +105,6 @@ pub fn ui_system(
                     ))
                     .collect();
 
-                // Reset algorithm state
                 aco_state.running = false;
                 aco_state.iterations = 0;
                 aco_state.iterations_since_improvement = 0;
@@ -140,7 +120,6 @@ pub fn ui_system(
             let button_text = if aco_state.running { text.stop } else { text.start };
             let mut button_response = ui.button(button_text);
             
-            // Add tooltip for the start button
             if !aco_state.running && !points.positions.is_empty() {
                 let tooltip = if app_language.current == Language::English {
                     "Press to start/restart the algorithm with current parameters on the same points"
@@ -152,36 +131,29 @@ pub fn ui_system(
             
             if button_response.clicked() {
                 if aco_state.running {
-                    // Stop the algorithm
                     aco_state.running = false;
                     if let Some(start_time) = aco_state.start_time {
                         aco_state.elapsed_time += Instant::now().duration_since(start_time);
                         aco_state.start_time = None;
                     }
                 } else {
-                    // Start or restart the algorithm
                     if !points.positions.is_empty() {
-                        // If we're restarting with the same points, reset algorithm state
-                        // but keep the point positions
                         aco_state.iterations = 0;
                         aco_state.iterations_since_improvement = 0;
                         aco_state.elapsed_time = Duration::from_secs(0);
                         
-                        // Clear previous best path
                         best_path.path.clear();
                         best_path.distance = f32::INFINITY;
                         
-                        // Reset pheromones
                         let n = points.positions.len();
                         aco_state.pheromones = vec![vec![1.0; n]; n];
                         
-                        // Clear path visualization
-                        safe_despawn_collection(&mut commands, &mut entity_tracker.path_entities);
+                        entity_tracker.path_entities.clear();
+                        
                         for entity in best_path_lines.iter() {
                             safe_despawn(&mut commands, entity);
                         }
                         
-                        // Start the algorithm
                         aco_state.running = true;
                         aco_state.start_time = Some(Instant::now());
                     }
@@ -189,7 +161,6 @@ pub fn ui_system(
             }
         });
 
-        // Fix formatting issues using standard String replacement
         ui.label(text.positions_count.replace("{}", &points.positions.len().to_string()));
 
         let total_time = if let Some(start_time) = aco_state.start_time {
@@ -201,7 +172,6 @@ pub fn ui_system(
         let secs = total_time.as_secs();
         let millis = total_time.subsec_millis();
         
-        // Use a direct string formatting approach for complex format patterns
         let mut elapsed_str = String::new();
         write!(elapsed_str, "{:02}:{:02}.{:03}", secs / 60, secs % 60, millis).unwrap();
         ui.label(text.elapsed_time.replace("{:02}:{:02}.{:03}", &elapsed_str));
@@ -209,7 +179,6 @@ pub fn ui_system(
         if !points.positions.is_empty() {
             let standard_time = estimate_standard_algorithm_time(points.positions.len());
             
-            // More intelligent formatting for different time scales
             let time_display = if standard_time.as_secs() > 86400 * 365 {
                 text.over_a_year.to_string()
             } else if standard_time.as_secs() > 86400 * 30 {
@@ -232,7 +201,6 @@ pub fn ui_system(
             
             ui.label(text.estimated_time.replace("{}", &time_display));
                 
-            // Add comparison if we have current time and it makes sense
             if total_time.as_secs_f64() > 0.1 && standard_time.as_secs_f64() > 0.1 {
                 let speedup = standard_time.as_secs_f64() / total_time.as_secs_f64();
                 if speedup > 1.0 {
@@ -247,12 +215,10 @@ pub fn ui_system(
             ui.label(text.best_distance.replace("{:.2}", &format!("{:.2}", best_path.distance)));
         }
 
-        // Add a separator with spacing
         ui.add_space(5.0);
         ui.separator();
         ui.add_space(5.0);
 
-        // Make headings more prominent
         ui.heading(text.algorithm_parameters);
         ui.add_space(10.0);
 
