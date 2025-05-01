@@ -43,16 +43,34 @@ pub fn update_points_visualization(
 
     entity_tracker.point_entities.clear();
 
-    // Cria novos elementos visuais para cada ponto
-    let circle = meshes.add(Circle::new(5.0));
-    let material = materials.add(ColorMaterial::from(Color::WHITE));
+    // Cria pontos visualmente atraentes com efeito de brilho
+    let point_size = 7.0; // Tamanho aumentado para melhor visibilidade
+    let circle = meshes.add(Circle::new(point_size));
+    let point_material = materials.add(ColorMaterial::from(Color::srgba(0.9, 0.9, 1.0, 1.0))); // Branco azulado mais suave
+    
+    // Cria contorno para destaque
+    let outline_size = point_size + 3.0;
+    let outline = meshes.add(Circle::new(outline_size));
+    let outline_material = materials.add(ColorMaterial::from(Color::srgba(0.4, 0.7, 1.0, 0.5))); // Azul com transparência
 
     for position in &points.positions {
+        // Primeiro cria o contorno/glow
+        commands.spawn((
+            MaterialMesh2dBundle {
+                mesh: outline.clone().into(),
+                material: outline_material.clone(),
+                transform: Transform::from_translation(Vec3::new(position.x, position.y, 0.0)),
+                ..default()
+            },
+            PointMarker,
+        ));
+        
+        // Depois cria o ponto principal
         let entity = commands.spawn((
             MaterialMesh2dBundle {
                 mesh: circle.clone().into(),
-                material: material.clone(),
-                transform: Transform::from_translation(Vec3::new(position.x, position.y, 0.0)),
+                material: point_material.clone(),
+                transform: Transform::from_translation(Vec3::new(position.x, position.y, 0.1)), // Ligeiramente acima do contorno
                 ..default()
             },
             PointMarker,
@@ -95,7 +113,10 @@ pub fn update_path_visualization(
     }
 
     let n = best_path.path.len();
-    let _line_material = materials.add(ColorMaterial::from(Color::srgb(0.0, 1.0, 0.0)));
+    
+    // Definir materiais para caminhos normais e destacados
+    let line_material = materials.add(ColorMaterial::from(Color::srgba(0.0, 0.9, 0.4, 0.7))); // Verde mais vibrante com transparência
+    let highlight_material = materials.add(ColorMaterial::from(Color::srgba(0.1, 1.0, 0.6, 0.9))); // Verde mais brilhante para destaques
 
     entity_tracker.path_entities.clear();
     for i in 0..n {
@@ -111,13 +132,22 @@ pub fn update_path_visualization(
         let to = points.positions[to_idx];
         let direction = to - from;
         let length = direction.length();
+        
+        // Largura da linha variável baseada na distância (linhas mais longas são mais finas)
+        let line_width = if length > 300.0 {
+            2.0  // Linha mais fina para caminhos longos
+        } else if length > 150.0 {
+            2.5  // Largura média para caminhos médios
+        } else {
+            3.0  // Linhas mais grossas para caminhos curtos
+        };
 
-        // Cria linha como um retângulo fino entre os dois pontos
-        let entity = commands.spawn((
+        // Primeiro, criar uma linha de "glow" mais larga
+        let glow_entity = commands.spawn((
             SpriteBundle {
                 sprite: Sprite {
-                    color: Color::srgb(0.0, 1.0, 0.0),
-                    custom_size: Some(Vec2::new(length, 1.5)),
+                    color: Color::srgba(0.0, 0.8, 0.3, 0.3),
+                    custom_size: Some(Vec2::new(length, line_width + 3.0)),
                     ..default()
                 },
                 transform: Transform {
@@ -129,7 +159,32 @@ pub fn update_path_visualization(
             },
             BestPathLine,
         )).id();
+        entity_tracker.path_entities.push(glow_entity);
         
+        // Depois, criar a linha principal
+        // Escolhe a cor baseada na posição no caminho (destaca as primeiras conexões)
+        let line_color = if i < n / 5 {
+            Color::srgba(0.1, 1.0, 0.6, 0.9) // Cor destacada para primeiras conexões
+        } else {
+            Color::srgba(0.0, 0.9, 0.4, 0.7) // Cor padrão
+        };
+        
+        let entity = commands.spawn((
+            SpriteBundle {
+                sprite: Sprite {
+                    color: line_color, // Usar a cor diretamente em vez de tentar extraí-la do material
+                    custom_size: Some(Vec2::new(length, line_width)),
+                    ..default()
+                },
+                transform: Transform {
+                    translation: Vec3::new((from.x + to.x) / 2.0, (from.y + to.y) / 2.0, 0.1),
+                    rotation: Quat::from_rotation_z(direction.y.atan2(direction.x)),
+                    ..default()
+                },
+                ..default()
+            },
+            BestPathLine,
+        )).id();
         entity_tracker.path_entities.push(entity);
     }
 }
