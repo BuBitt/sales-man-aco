@@ -355,9 +355,9 @@ fn ui_system(
                     aco_state.start_time = None;
                 }
             }
-
-            ui.label(format!("Positions count: {}", points.positions.len()));
         });
+
+        ui.label(format!("Positions count: {}", points.positions.len()));
 
         let total_time = if let Some(start_time) = aco_state.start_time {
             aco_state.elapsed_time + Instant::now().duration_since(start_time)
