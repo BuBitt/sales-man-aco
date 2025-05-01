@@ -52,15 +52,41 @@ fn main() {
         .insert_resource(CandidateList::default())
         .insert_resource(AppLanguage::default())
         .add_systems(Startup, setup)
-        .add_systems(Update, ui_system)
-        .add_systems(Update, handle_input)
-        .add_systems(Update, camera_drag)
-        .add_systems(Update, camera_zoom)
-        .add_systems(Update, update_distance_matrix) // Run this first
-        .add_systems(Update, update_candidate_lists) // Then run this
-        .add_systems(Update, update_points_visualization)
-        .add_systems(Update, update_path_visualization)
-        .add_systems(Update, run_aco_algorithm)
+        // Sistemas de UI e entrada - executam em cada frame
+        .add_systems(Update, (ui_system, handle_input))
+        // Sistemas de câmera - executam em cada frame
+        .add_systems(Update, (camera_drag, camera_zoom))
+        // Sistemas de cálculo intensivo - executam em intervalos ou quando necessário
+        .add_systems(
+            Update,
+            (update_distance_matrix, update_candidate_lists)
+                .run_if(resource_changed::<Points>)
+        )
+        // Sistema de visualização de pontos - executa apenas quando os pontos mudam
+        .add_systems(
+            Update, 
+            update_points_visualization
+                .run_if(resource_changed::<Points>)
+        )
+        // Sistema de visualização de caminhos - executa apenas quando o melhor caminho muda
+        .add_systems(
+            Update,
+            update_path_visualization
+                .run_if(resource_changed::<BestPath>)
+        )
+        // Sistema ACO - executa a cada 5 frames para pontos > 100
+        .add_systems(
+            Update, 
+            run_aco_algorithm
+                .run_if(|state: Res<AcoState>, points: Res<Points>| {
+                    if points.positions.len() > 100 {
+                        // Para muitos pontos, rodar menos frequentemente
+                        state.running && state.iterations % 5 == 0
+                    } else {
+                        state.running
+                    }
+                })
+        )
         .run();
 }
 

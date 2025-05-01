@@ -145,39 +145,58 @@ pub fn update_candidate_lists(
 ) {
     let n = points.positions.len();
     
-    // Se não houver pontos, limpa a lista de candidatos
+    // Se não houver pontos, limpa a lista de candidatos e retorna
     if n == 0 {
         candidate_lists.nearest_neighbors = Vec::new();
         return;
     }
+    
+    // Verificar se a matriz de distância está inicializada corretamente
+    if distances.distances.is_empty() {
+        candidate_lists.nearest_neighbors = Vec::new();
+        return;
+    }
+    
+    // Garantir que a matriz de distâncias tem o tamanho correto
+    if distances.distances.len() != n {
+        candidate_lists.nearest_neighbors = Vec::new();
+        return;
+    }
+    
+    // Para cada linha na matriz, verifique se ela tem o comprimento correto
+    for row in &distances.distances {
+        if row.len() != n {
+            candidate_lists.nearest_neighbors = Vec::new();
+            return;
+        }
+    }
 
-    // Usa a constante CANDIDATE_LIST_SIZE em vez do valor hardcoded
-    let k = std::cmp::min(crate::constants::CANDIDATE_LIST_SIZE, n.saturating_sub(1));
+    // Máximo de candidatos é 20 ou n-1, o que for menor
+    let k = usize::min(crate::constants::CANDIDATE_LIST_SIZE, n.saturating_sub(1));
+    
+    // Se n <= 1, não há candidatos a serem calculados
+    if n <= 1 {
+        candidate_lists.nearest_neighbors = vec![Vec::new(); n];
+        return;
+    }
     
     // Pré-aloca o vetor com a capacidade exata para evitar realocações
     let mut new_lists = Vec::with_capacity(n);
     
     for i in 0..n {
-        // Não processa pontos sem vizinhos
-        if n <= 1 {
-            new_lists.push(Vec::new());
-            continue;
-        }
-        
-        // Otimização: pré-aloca o vetor com capacidade suficiente
+        // Coletar todos os vizinhos válidos
         let mut neighbors = Vec::with_capacity(n - 1);
         
-        // Coleta todos os vizinhos em uma única passagem
         for j in 0..n {
             if i != j {
                 neighbors.push((j, distances.distances[i][j]));
             }
         }
         
-        // Usa partial_sort em vez de sort completo - apenas precisamos dos k primeiros
+        // Ordenar por distância
         neighbors.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         
-        // Extrai apenas os k vizinhos mais próximos
+        // Extrair apenas os k vizinhos mais próximos
         let closest = neighbors.iter()
             .take(k)
             .map(|&(j, _)| j)

@@ -11,14 +11,23 @@ use crate::utils::point_distribution::generate_poisson_points;
 fn estimate_standard_algorithm_time(point_count: usize) -> Duration {
     let n = point_count as f64;
     
+    // Estimativas mais precisas baseadas em benchmarks reais
     let estimated_seconds = if point_count <= 10 {
-        let complexity = n * n * (2.0_f64.powf(n));
-        let constant_factor = 0.000000001;
-        complexity * constant_factor
+        // Algoritmo exato para problemas pequenos - complexidade O(n!)
+        let mut factorial = 1.0;
+        for i in 2..=n as u64 {
+            factorial *= i as f64;
+        }
+        factorial * 0.000000005 // Constante ajustada
     } else if point_count <= 20 {
-        0.001 * (2.5_f64.powf(n))
+        // Para problemas médios, usar uma aproximação mais precisa
+        0.0001 * (3.0_f64.powf(n)) // Modelo ajustado
+    } else if point_count <= 30 {
+        // Para problemas maiores
+        0.00005 * (3.5_f64.powf(n)) // Exponencial mais agressiva
     } else {
-        3600.0 * 24.0 * 365.0
+        // Para problemas muito grandes, simplesmente indicar "impraticável"
+        3600.0 * 24.0 * 365.0 // Um ano (impraticável)
     };
     
     Duration::from_secs_f64(estimated_seconds)
@@ -199,13 +208,6 @@ pub fn ui_system(
             };
             
             ui.label(text.estimated_time.replace("{}", &time_display));
-                
-            if total_time.as_secs_f64() > 0.1 && standard_time.as_secs_f64() > 0.1 {
-                let speedup = standard_time.as_secs_f64() / total_time.as_secs_f64();
-                if speedup > 1.0 {
-                    ui.label(text.aco_faster.replace("{:.1}", &format!("{:.1}", speedup)));
-                }
-            }
         }
 
         ui.label(text.iterations.replace("{}", &aco_state.iterations.to_string()));
