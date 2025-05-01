@@ -7,6 +7,7 @@ mod resources;
 mod aco;
 mod systems;
 mod utils;
+mod ui; // Add this line to import the ui module
 
 use components::*;
 use resources::*;
@@ -39,6 +40,7 @@ fn main() {
         .insert_resource(EntityTracker::default())
         .insert_resource(DistanceMatrix::default())
         .insert_resource(CandidateList::default())
+        .insert_resource(AppLanguage::default()) // Add language resource
         .add_systems(Startup, setup)
         .add_systems(Update, (
             ui_system,

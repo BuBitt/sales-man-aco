@@ -4,6 +4,7 @@ use rand::prelude::*;
 use std::time::{Duration, Instant};
 use crate::components::*;
 use crate::resources::*;
+use crate::ui::language::{get_text, UiText};
 use crate::utils::{safe_despawn, safe_despawn_collection};
 
 // Update this utility function to estimate standard algorithm time more accurately
@@ -42,17 +43,32 @@ pub fn ui_system(
     mut points: ResMut<Points>,
     mut best_path: ResMut<BestPath>,
     mut aco_params: ResMut<AcoParameters>,
+    mut app_language: ResMut<AppLanguage>,
     mut commands: Commands,
     mut entity_tracker: ResMut<EntityTracker>,
     point_markers: Query<Entity, With<PointMarker>>,
     path_lines: Query<Entity, With<PathLine>>,
     best_path_lines: Query<Entity, With<BestPathLine>>,
 ) {
+    // Get the appropriate text based on the current language
+    let text = get_text(app_language.current);
+    
     egui::Window::new("TSP Controls").show(contexts.ctx_mut(), |ui| {
+        // Language selector
         ui.horizontal(|ui| {
-            ui.add(egui::Slider::new(&mut points.count, 5..=100).text("Points"));
+            ui.label(text.language);
+            if ui.selectable_label(app_language.current == Language::English, "English").clicked() {
+                app_language.current = Language::English;
+            }
+            if ui.selectable_label(app_language.current == Language::Portuguese, "Português").clicked() {
+                app_language.current = Language::Portuguese;
+            }
+        });
+        
+        ui.horizontal(|ui| {
+            ui.add(egui::Slider::new(&mut points.count, 5..=100).text(text.points_slider));
 
-            if ui.button("Generate Points").clicked() {
+            if ui.button(text.generate_points).clicked() {
                 safe_despawn_collection(&mut commands, &mut entity_tracker.point_entities);
                 safe_despawn_collection(&mut commands, &mut entity_tracker.path_entities);
 
@@ -94,7 +110,7 @@ pub fn ui_system(
                 aco_state.pheromones = vec![vec![1.0; n]; n];
             }
 
-            let button_text = if aco_state.running { "Stop" } else { "Start" };
+            let button_text = if aco_state.running { text.stop } else { text.start };
             if ui.button(button_text).clicked() {
                 aco_state.running = !aco_state.running;
                 if aco_state.running {
@@ -106,7 +122,8 @@ pub fn ui_system(
             }
         });
 
-        ui.label(format!("Positions count: {}", points.positions.len()));
+        // Fix all format! calls to use explicit format strings
+        ui.label(format!("{}", text.positions_count.replace("{}", &points.positions.len().to_string())));
 
         let total_time = if let Some(start_time) = aco_state.start_time {
             aco_state.elapsed_time + Instant::now().duration_since(start_time)
@@ -116,7 +133,7 @@ pub fn ui_system(
 
         let secs = total_time.as_secs();
         let millis = total_time.subsec_millis();
-        ui.label(format!("Elapsed: {:02}:{:02}.{:03}", secs / 60, secs % 60, millis));
+        ui.label(format!("{}", text.elapsed_time.replace("{}", &format!("{:02}:{:02}.{:03}", secs / 60, secs % 60, millis))));
 
         // Format time more intelligently for very large durations
         if !points.positions.is_empty() {
@@ -124,59 +141,59 @@ pub fn ui_system(
             
             // More intelligent formatting for different time scales
             let time_display = if standard_time.as_secs() > 86400 * 365 {
-                "over a year (impractical)".to_string()
+                text.over_a_year.to_string()
             } else if standard_time.as_secs() > 86400 * 30 {
-                format!("{:.1} months", standard_time.as_secs() as f64 / (86400.0 * 30.0))
+                text.months.replace("{}", &format!("{:.1}", standard_time.as_secs_f64() / (86400.0 * 30.0)))
             } else if standard_time.as_secs() > 86400 {
-                format!("{:.1} days", standard_time.as_secs() as f64 / 86400.0)
+                text.days.replace("{}", &format!("{:.1}", standard_time.as_secs_f64() / 86400.0))
             } else if standard_time.as_secs() > 3600 {
-                format!("{:.1} hours", standard_time.as_secs() as f64 / 3600.0)
+                text.hours.replace("{}", &format!("{:.1}", standard_time.as_secs_f64() / 3600.0))
             } else if standard_time.as_secs() > 60 {
-                format!("{:.1} minutes", standard_time.as_secs() as f64 / 60.0)
+                text.minutes.replace("{}", &format!("{:.1}", standard_time.as_secs_f64() / 60.0))
             } else {
                 let secs = standard_time.as_secs();
                 let millis = standard_time.subsec_millis();
-                format!("{}.{:03} seconds", secs, millis)
+                text.seconds.replace("{}", &format!("{:02}.{:03}", secs, millis))
             };
             
-            ui.label(format!("Estimated time for standard algorithm: {}", time_display));
+            ui.label(format!("{}", text.estimated_time.replace("{}", &time_display)));
                 
             // Add comparison if we have current time and it makes sense
             if total_time.as_secs_f64() > 0.1 && standard_time.as_secs_f64() > 0.1 {
                 let speedup = standard_time.as_secs_f64() / total_time.as_secs_f64();
                 if speedup > 1.0 {
-                    ui.label(format!("ACO is approximately {:.1}x faster than standard approach", speedup));
+                    ui.label(format!("{}", text.aco_faster.replace("{}", &format!("{:.1}", speedup))));
                 }
             }
         }
 
-        ui.label(format!("Iterations: {}", aco_state.iterations));
+        ui.label(format!("{}", text.iterations.replace("{}", &aco_state.iterations.to_string())));
 
         if best_path.distance != f32::INFINITY {
-            ui.label(format!("Best distance: {:.2}", best_path.distance));
+            ui.label(format!("{}", text.best_distance.replace("{}", &format!("{:.2}", best_path.distance))));
         }
 
         ui.separator();
-        ui.heading("Algorithm Parameters");
+        ui.heading(text.algorithm_parameters);
 
         ui.add(egui::Slider::new(&mut aco_params.ant_count, 5..=100)
-            .text("Ant Count"));
+            .text(text.ant_count));
         
         if !points.positions.is_empty() {
             let num_points = points.positions.len();
             if aco_params.ant_count <= num_points {
-                ui.label(format!("Cada formiga iniciará em um ponto distinto (total: {})", num_points));
+                ui.label(format!("{}", text.each_ant_starts.replace("{}", &num_points.to_string())));
             } else {
-                ui.label(format!("Formigas serão distribuídas aleatoriamente entre os {} pontos", num_points));
+                ui.label(format!("{}", text.ants_distributed.replace("{}", &num_points.to_string())));
             }
         }
         
-        ui.add(egui::Slider::new(&mut aco_params.alpha, 0.1..=5.0).text("Alpha (pheromone importance)"));
-        ui.add(egui::Slider::new(&mut aco_params.beta, 0.1..=5.0).text("Beta (distance importance)"));
-        ui.add(egui::Slider::new(&mut aco_params.rho, 0.0..=1.0).text("Rho (evaporation rate)"));
-        ui.add(egui::Slider::new(&mut aco_params.q, 1.0..=1000.0).text("Q (pheromone deposit)"));
+        ui.add(egui::Slider::new(&mut aco_params.alpha, 0.1..=5.0).text(text.alpha));
+        ui.add(egui::Slider::new(&mut aco_params.beta, 0.1..=5.0).text(text.beta));
+        ui.add(egui::Slider::new(&mut aco_params.rho, 0.0..=1.0).text(text.rho));
+        ui.add(egui::Slider::new(&mut aco_params.q, 1.0..=1000.0).text(text.q_factor));
 
-        if ui.button("Reset Parameters").clicked() {
+        if ui.button(text.reset_parameters).clicked() {
             *aco_params = AcoParameters::default();
         }
     });

@@ -90,3 +90,20 @@ pub struct BestPath {
     pub path: Vec<usize>,
     pub distance: f32,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Language {
+    English,
+    Portuguese,
+}
+
+impl Default for Language {
+    fn default() -> Self {
+        Language::English
+    }
+}
+
+#[derive(Resource, Default)]
+pub struct AppLanguage {
+    pub current: Language,
+}
