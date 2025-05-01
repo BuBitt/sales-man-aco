@@ -4,8 +4,6 @@
 
 Uma implementação paralela e otimizada do algoritmo de Otimização por Colônia de Formigas (ACO) para resolver o clássico Problema do Caixeiro Viajante (TSP), com visualização interativa usando o motor de jogos Bevy.
 
-![TSP Solution Demo](https://i.imgur.com/example.gif) <!-- Substitua pelo seu GIF demo real -->
-
 ## Características
 
 - **Alto desempenho**: Implementação paralela usando múltiplos threads para processamento rápido
@@ -24,7 +22,18 @@ Uma implementação paralela e otimizada do algoritmo de Otimização por Colôn
 
 ## Instalação
 
-Certifique-se de ter o Rust e Cargo instalados. Em seguida, clone o repositório:
+Certifique-se de ter o Rust e Cargo instalados. Se ainda não tiver, instale via rustup:
+
+```bash
+# Instalar rustup (gerenciador de versões Rust)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Siga as instruções na tela para completar a instalação
+# Em seguida, configure o ambiente para a sessão atual
+source "$HOME/.cargo/env"
+```
+
+Em seguida, clone o repositório:
 
 ```bash
 git clone https://github.com/seu-usuario/aco-tsp.git
@@ -70,6 +79,7 @@ Se você encontrar problemas de compilação ou execução, verifique:
 1. **Versão do Rust**: Este projeto foi desenvolvido com Rust 1.73+ e Bevy 0.13.2
 2. **Dependências**: Execute `cargo update` para atualizar as dependências
 3. **Performance**: Use sempre `cargo run --release` para melhor desempenho
+4. **Grandes conjuntos de dados**: Para problemas com muitos pontos (>100), o algoritmo otimiza automaticamente o uso de recursos, priorizando eficiência computacional. Isso pode resultar em iterações mais lentas, mas a convergência é mantida.
 
 Para depurar problemas de paralelismo, considere executar com variáveis de ambiente para Rayon:
 
