@@ -1,11 +1,27 @@
+//! # Módulo de Visualização
+//!
+//! Este módulo contém sistemas para renderizar e atualizar a visualização gráfica
+//! dos pontos, caminhos e outros elementos visuais da simulação.
+
 use bevy::prelude::*;
 use bevy::sprite::MaterialMesh2dBundle;
 use crate::components::*;
 use crate::resources::*;
 use crate::utils::{safe_despawn, safe_despawn_collection};
-// Import all required Rayon traits
 use rayon::prelude::*;
 
+/// Atualiza a visualização de pontos na tela
+///
+/// Este sistema cria ou atualiza as entidades visuais para representar cada ponto.
+/// Ele é ativado quando a coleção de pontos é modificada.
+///
+/// # Argumentos
+/// * `commands` - Para criar novas entidades
+/// * `points` - A coleção de pontos a serem visualizados
+/// * `entity_tracker` - Rastreia as entidades criadas para gerenciamento posterior
+/// * `point_markers` - Query para obter entidades de ponto existentes
+/// * `meshes` - Assets para criar formas visuais
+/// * `materials` - Assets para definir aparência visual
 pub fn update_points_visualization(
     mut commands: Commands,
     points: Res<Points>,
@@ -14,17 +30,20 @@ pub fn update_points_visualization(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
+    // Só atualiza quando os pontos mudam e não está vazio, ou quando a visualização precisa ser limpa
     if (!points.is_changed() && !point_markers.is_empty() && !entity_tracker.point_entities.is_empty()) 
         || points.positions.is_empty() {
         return;
     }
 
+    // Remove pontos existentes
     for entity in point_markers.iter() {
         safe_despawn(&mut commands, entity);
     }
 
     entity_tracker.point_entities.clear();
 
+    // Cria novos elementos visuais para cada ponto
     let circle = meshes.add(Circle::new(5.0));
     let material = materials.add(ColorMaterial::from(Color::WHITE));
 
@@ -43,6 +62,18 @@ pub fn update_points_visualization(
     }
 }
 
+/// Atualiza a visualização do melhor caminho encontrado
+///
+/// Renderiza linhas entre os pontos que formam o melhor caminho atual,
+/// permitindo visualizar a solução do TSP.
+///
+/// # Argumentos
+/// * `commands` - Para criar novas entidades
+/// * `best_path` - Contém a informação do melhor caminho encontrado
+/// * `points` - Posições dos pontos no espaço 2D
+/// * `entity_tracker` - Rastreia entidades para gerenciamento
+/// * `best_path_lines` - Query para obter linhas existentes do melhor caminho
+/// * `materials` - Assets para definir aparência visual
 pub fn update_path_visualization(
     mut commands: Commands,
     best_path: Res<BestPath>,
@@ -51,10 +82,12 @@ pub fn update_path_visualization(
     best_path_lines: Query<Entity, With<BestPathLine>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
+    // Verifica se há um novo melhor caminho para visualizar
     if !best_path.is_changed() || best_path.path.is_empty() {
         return;
     }
 
+    // Remove linhas existentes
     safe_despawn_collection(&mut commands, &mut entity_tracker.path_entities);
 
     for entity in best_path_lines.iter() {
@@ -69,6 +102,7 @@ pub fn update_path_visualization(
         let from_idx = best_path.path[i];
         let to_idx = best_path.path[(i + 1) % n];
 
+        // Verifica índices fora dos limites para segurança
         if from_idx >= points.positions.len() || to_idx >= points.positions.len() {
             continue;
         }
@@ -78,6 +112,7 @@ pub fn update_path_visualization(
         let direction = to - from;
         let length = direction.length();
 
+        // Cria linha como um retângulo fino entre os dois pontos
         let entity = commands.spawn((
             SpriteBundle {
                 sprite: Sprite {
@@ -99,37 +134,47 @@ pub fn update_path_visualization(
     }
 }
 
+/// Atualiza a matriz de distâncias entre todos os pares de pontos
+///
+/// Calcula a distância euclidiana entre cada par de pontos e
+/// armazena os resultados em uma matriz para uso eficiente pelo algoritmo ACO.
+///
+/// # Argumentos
+/// * `points` - As posições de todos os pontos no espaço 2D
+/// * `distance_matrix` - A matriz de distâncias a ser atualizada
 pub fn update_distance_matrix(
     points: Res<Points>,
     mut distance_matrix: ResMut<DistanceMatrix>,
 ) {
+    // Só recalcula quando os pontos mudam e existem pontos
     if points.is_changed() && !points.positions.is_empty() {
         let n = points.positions.len();
         let mut distances = vec![vec![0.0; n]; n];
         
-        // Use the correct Rayon parallel iteration pattern
+        // Para conjuntos grandes de pontos, usa paralelismo para calcular distâncias
         if n > 100 {
+            // Implementação paralela para grandes conjuntos de dados
             distances.par_iter_mut().enumerate().for_each(|(i, row)| {
                 for j in (i+1)..n {
                     let dist = points.positions[i].distance(points.positions[j]);
                     row[j] = dist;
-                    // Note: we can't set distances[j][i] here because of borrow rules
+                    // Não podemos preencher distances[j][i] aqui devido às regras de borrowing
                 }
             });
             
-            // Fill the other half of the matrix in a second pass
+            // Preenche a outra metade da matriz em uma segunda passagem
             for i in 0..n {
                 for j in (i+1)..n {
-                    distances[j][i] = distances[i][j];
+                    distances[j][i] = distances[i][j]; // A distância é simétrica
                 }
             }
         } else {
-            // Sequential implementation for small datasets
+            // Implementação sequencial para conjuntos pequenos
             for i in 0..n {
                 for j in (i+1)..n {
                     let dist = points.positions[i].distance(points.positions[j]);
                     distances[i][j] = dist;
-                    distances[j][i] = dist;
+                    distances[j][i] = dist; // A distância é simétrica
                 }
             }
         }
@@ -138,6 +183,15 @@ pub fn update_distance_matrix(
     }
 }
 
+/// Atualiza as listas de candidatos para cada ponto
+///
+/// Para cada ponto, determina os `k` vizinhos mais próximos para uso
+/// no algoritmo ACO. Isso reduz significativamente o espaço de busca.
+///
+/// # Argumentos
+/// * `points` - As posições de todos os pontos no espaço 2D
+/// * `distances` - A matriz de distâncias entre os pontos
+/// * `candidate_lists` - As listas de candidatos a serem atualizadas
 pub fn update_candidate_lists(
     points: Res<Points>,
     distances: Res<DistanceMatrix>,
@@ -151,19 +205,17 @@ pub fn update_candidate_lists(
         return;
     }
     
-    // Verificar se a matriz de distância está inicializada corretamente
+    // Verificações de segurança para a matriz de distâncias
     if distances.distances.is_empty() {
         candidate_lists.nearest_neighbors = Vec::new();
         return;
     }
     
-    // Garantir que a matriz de distâncias tem o tamanho correto
     if distances.distances.len() != n {
         candidate_lists.nearest_neighbors = Vec::new();
         return;
     }
     
-    // Para cada linha na matriz, verifique se ela tem o comprimento correto
     for row in &distances.distances {
         if row.len() != n {
             candidate_lists.nearest_neighbors = Vec::new();
@@ -171,20 +223,20 @@ pub fn update_candidate_lists(
         }
     }
 
-    // Máximo de candidatos é 20 ou n-1, o que for menor
+    // Número máximo de candidatos por ponto (constante ou n-1, o que for menor)
     let k = usize::min(crate::constants::CANDIDATE_LIST_SIZE, n.saturating_sub(1));
     
-    // Se n <= 1, não há candidatos a serem calculados
+    // Caso especial: quando há 0 ou 1 ponto, não há vizinhos a considerar
     if n <= 1 {
         candidate_lists.nearest_neighbors = vec![Vec::new(); n];
         return;
     }
     
-    // Pré-aloca o vetor com a capacidade exata para evitar realocações
+    // Pré-aloca o vetor com a capacidade exata para melhor performance
     let mut new_lists = Vec::with_capacity(n);
     
     for i in 0..n {
-        // Coletar todos os vizinhos válidos
+        // Coleta todos os vizinhos exceto o próprio ponto
         let mut neighbors = Vec::with_capacity(n - 1);
         
         for j in 0..n {
@@ -193,10 +245,10 @@ pub fn update_candidate_lists(
             }
         }
         
-        // Ordenar por distância
+        // Ordenação rápida por distância (sort_unstable é mais rápido que sort padrão)
         neighbors.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         
-        // Extrair apenas os k vizinhos mais próximos
+        // Extrai apenas os k vizinhos mais próximos
         let closest = neighbors.iter()
             .take(k)
             .map(|&(j, _)| j)

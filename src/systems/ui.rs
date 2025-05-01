@@ -8,10 +8,21 @@ use crate::ui::language::get_text;
 use crate::utils::safe_despawn;
 use crate::utils::point_distribution::generate_poisson_points;
 
+/// Estima o tempo necessário para resolver o TSP usando um algoritmo de força bruta
+/// 
+/// Baseado na complexidade fatorial do problema do caixeiro viajante,
+/// esta função calcula uma aproximação de quanto tempo um algoritmo exato
+/// levaria para encontrar a solução ótima.
+/// 
+/// # Argumentos
+/// * `point_count` - O número de pontos/cidades no problema
+/// 
+/// # Retorno
+/// Um `Duration` representando o tempo estimado de execução
 fn estimate_standard_algorithm_time(point_count: usize) -> Duration {
     let n = point_count as f64;
     
-    // Estimativas mais precisas baseadas em benchmarks reais
+    // Estimativas baseadas em benchmarks reais para diferentes tamanhos de problema
     let estimated_seconds = if point_count <= 10 {
         // Algoritmo exato para problemas pequenos - complexidade O(n!)
         let mut factorial = 1.0;
@@ -33,6 +44,11 @@ fn estimate_standard_algorithm_time(point_count: usize) -> Duration {
     Duration::from_secs_f64(estimated_seconds)
 }
 
+/// Monitora e atualiza o estado de interação do usuário com a interface
+/// 
+/// # Argumentos
+/// * `ui_state` - Estado atual da UI que será atualizado
+/// * `contexts` - Contexto da interface EGUI
 pub fn handle_input(
     mut ui_state: ResMut<UiState>,
     mut contexts: EguiContexts,
