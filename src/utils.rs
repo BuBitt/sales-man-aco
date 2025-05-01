@@ -35,3 +35,8 @@ pub fn calculate_distance(path: &[usize], distances: &[Vec<f32>]) -> f32 {
     total_distance += distances[path[len - 1]][path[0]];
     total_distance
 }
+
+// Add this helper function for string formatting
+pub fn format_with_args<T: std::fmt::Display>(format_str: &str, args: T) -> String {
+    format!("{}", format!("{}", args).replace("{}", format_str))
+}

@@ -13,6 +13,14 @@ use components::*;
 use resources::*;
 use systems::*;
 
+// Add these macros to help with the string formatting
+#[macro_export]
+macro_rules! format_str {
+    ($format:expr, $($arg:expr),*) => {{
+        format!($format, $($arg),*)
+    }};
+}
+
 fn main() {
     App::new()
         .add_plugins((

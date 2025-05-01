@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 use rand::prelude::*;
 use std::time::{Duration, Instant};
+use std::fmt::Write;
 use crate::components::*;
 use crate::resources::*;
 use crate::ui::language::{get_text, UiText};
@@ -122,8 +123,8 @@ pub fn ui_system(
             }
         });
 
-        // Fix all format! calls to use explicit format strings
-        ui.label(format!("{}", text.positions_count.replace("{}", &points.positions.len().to_string())));
+        // Fix formatting issues using standard String replacement
+        ui.label(text.positions_count.replace("{}", &points.positions.len().to_string()));
 
         let total_time = if let Some(start_time) = aco_state.start_time {
             aco_state.elapsed_time + Instant::now().duration_since(start_time)
@@ -133,7 +134,11 @@ pub fn ui_system(
 
         let secs = total_time.as_secs();
         let millis = total_time.subsec_millis();
-        ui.label(format!("{}", text.elapsed_time.replace("{}", &format!("{:02}:{:02}.{:03}", secs / 60, secs % 60, millis))));
+        
+        // Use a direct string formatting approach for complex format patterns
+        let mut elapsed_str = String::new();
+        write!(elapsed_str, "{:02}:{:02}.{:03}", secs / 60, secs % 60, millis).unwrap();
+        ui.label(text.elapsed_time.replace("{:02}:{:02}.{:03}", &elapsed_str));
 
         // Format time more intelligently for very large durations
         if !points.positions.is_empty() {
@@ -143,34 +148,38 @@ pub fn ui_system(
             let time_display = if standard_time.as_secs() > 86400 * 365 {
                 text.over_a_year.to_string()
             } else if standard_time.as_secs() > 86400 * 30 {
-                text.months.replace("{}", &format!("{:.1}", standard_time.as_secs_f64() / (86400.0 * 30.0)))
+                let months = standard_time.as_secs_f64() / (86400.0 * 30.0);
+                text.months.replace("{:.1}", &format!("{:.1}", months))
             } else if standard_time.as_secs() > 86400 {
-                text.days.replace("{}", &format!("{:.1}", standard_time.as_secs_f64() / 86400.0))
+                let days = standard_time.as_secs_f64() / 86400.0;
+                text.days.replace("{:.1}", &format!("{:.1}", days))
             } else if standard_time.as_secs() > 3600 {
-                text.hours.replace("{}", &format!("{:.1}", standard_time.as_secs_f64() / 3600.0))
+                let hours = standard_time.as_secs_f64() / 3600.0;
+                text.hours.replace("{:.1}", &format!("{:.1}", hours))
             } else if standard_time.as_secs() > 60 {
-                text.minutes.replace("{}", &format!("{:.1}", standard_time.as_secs_f64() / 60.0))
+                let minutes = standard_time.as_secs_f64() / 60.0;
+                text.minutes.replace("{:.1}", &format!("{:.1}", minutes))
             } else {
                 let secs = standard_time.as_secs();
                 let millis = standard_time.subsec_millis();
-                text.seconds.replace("{}", &format!("{:02}.{:03}", secs, millis))
+                text.seconds.replace("{}", &format!("{}", secs)).replace("{:03}", &format!("{:03}", millis))
             };
             
-            ui.label(format!("{}", text.estimated_time.replace("{}", &time_display)));
+            ui.label(text.estimated_time.replace("{}", &time_display));
                 
             // Add comparison if we have current time and it makes sense
             if total_time.as_secs_f64() > 0.1 && standard_time.as_secs_f64() > 0.1 {
                 let speedup = standard_time.as_secs_f64() / total_time.as_secs_f64();
                 if speedup > 1.0 {
-                    ui.label(format!("{}", text.aco_faster.replace("{}", &format!("{:.1}", speedup))));
+                    ui.label(text.aco_faster.replace("{:.1}", &format!("{:.1}", speedup)));
                 }
             }
         }
 
-        ui.label(format!("{}", text.iterations.replace("{}", &aco_state.iterations.to_string())));
+        ui.label(text.iterations.replace("{}", &aco_state.iterations.to_string()));
 
         if best_path.distance != f32::INFINITY {
-            ui.label(format!("{}", text.best_distance.replace("{}", &format!("{:.2}", best_path.distance))));
+            ui.label(text.best_distance.replace("{:.2}", &format!("{:.2}", best_path.distance)));
         }
 
         ui.separator();
@@ -182,9 +191,9 @@ pub fn ui_system(
         if !points.positions.is_empty() {
             let num_points = points.positions.len();
             if aco_params.ant_count <= num_points {
-                ui.label(format!("{}", text.each_ant_starts.replace("{}", &num_points.to_string())));
+                ui.label(text.each_ant_starts.replace("{}", &num_points.to_string()));
             } else {
-                ui.label(format!("{}", text.ants_distributed.replace("{}", &num_points.to_string())));
+                ui.label(text.ants_distributed.replace("{}", &num_points.to_string()));
             }
         }
         
