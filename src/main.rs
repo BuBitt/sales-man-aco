@@ -15,6 +15,12 @@ const DEFAULT_BETA: f32 = 2.0;  // Distance importance
 const DEFAULT_RHO: f32 = 0.5;   // Pheromone evaporation rate
 const DEFAULT_Q: f32 = 100.0;   // Pheromone deposit factor
 
+#[derive(Default, Resource)]
+struct EntityTracker {
+    point_entities: Vec<Entity>,
+    path_entities: Vec<Entity>,
+}
+
 fn main() {
     App::new()
         .add_plugins((
@@ -35,10 +41,11 @@ fn main() {
         ))
         .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.1)))
         .insert_resource(AcoState::default())
-        .insert_resource(Points::default())
+        .insert_resource(Points::new())
         .insert_resource(BestPath::default())
         .insert_resource(AcoParameters::default())
         .insert_resource(UiState::default())
+        .insert_resource(EntityTracker::default())
         .add_systems(Startup, setup)
         .add_systems(Update, (
             ui_system,
@@ -68,6 +75,15 @@ struct AcoState {
 struct Points {
     positions: Vec<Vec2>,
     count: usize,
+}
+
+impl Points {
+    fn new() -> Self {
+        Self {
+            positions: Vec::new(),
+            count: 20,
+        }
+    }
 }
 
 #[derive(Default, Resource)]
@@ -206,9 +222,27 @@ impl Ant {
     }
 }
 
+fn safe_despawn_collection(
+    commands: &mut Commands,
+    entities: &mut Vec<Entity>,
+) {
+    let mut to_remove = Vec::new();
+    for (i, &entity) in entities.iter().enumerate() {
+        if commands.get_entity(entity).is_some() {
+            commands.entity(entity).despawn_recursive();
+            to_remove.push(i);
+        }
+    }
+
+    to_remove.sort_by(|a, b| b.cmp(a));
+    for index in to_remove {
+        entities.remove(index);
+    }
+}
+
 fn safe_despawn(commands: &mut Commands, entity: Entity) {
     if commands.get_entity(entity).is_some() {
-        commands.entity(entity).despawn();
+        commands.entity(entity).despawn_recursive();
     }
 }
 
@@ -264,6 +298,7 @@ fn ui_system(
     mut best_path: ResMut<BestPath>,
     mut aco_params: ResMut<AcoParameters>,
     mut commands: Commands,
+    mut entity_tracker: ResMut<EntityTracker>,
     point_markers: Query<Entity, With<PointMarker>>,
     path_lines: Query<Entity, With<PathLine>>,
     best_path_lines: Query<Entity, With<BestPathLine>>,
@@ -285,8 +320,14 @@ fn ui_system(
                     safe_despawn(&mut commands, entity);
                 }
 
+                entity_tracker.point_entities.clear();
+                entity_tracker.path_entities.clear();
+
+                let count = points.count.max(5);
+                points.count = count;
+
                 let mut rng = thread_rng();
-                points.positions = (0..points.count)
+                points.positions = (0..count)
                     .map(|_| Vec2::new(
                         rng.gen_range(-400.0..400.0),
                         rng.gen_range(-300.0..300.0),
@@ -304,16 +345,7 @@ fn ui_system(
                 aco_state.pheromones = vec![vec![1.0; n]; n];
             }
 
-            let button_text = if aco_state.running { "Stop" } else { "Start" };
-            if ui.button(button_text).clicked() {
-                aco_state.running = !aco_state.running;
-                if aco_state.running {
-                    aco_state.start_time = Some(Instant::now());
-                } else if let Some(start_time) = aco_state.start_time {
-                    aco_state.elapsed_time += Instant::now().duration_since(start_time);
-                    aco_state.start_time = None;
-                }
-            }
+            ui.label(format!("Positions count: {}", points.positions.len()));
         });
 
         let total_time = if let Some(start_time) = aco_state.start_time {
@@ -335,7 +367,18 @@ fn ui_system(
         ui.separator();
         ui.heading("Algorithm Parameters");
 
-        ui.add(egui::Slider::new(&mut aco_params.ant_count, 5..=100).text("Ant Count"));
+        ui.add(egui::Slider::new(&mut aco_params.ant_count, 5..=100)
+            .text("Ant Count"));
+        
+        if !points.positions.is_empty() {
+            let num_points = points.positions.len();
+            if aco_params.ant_count <= num_points {
+                ui.label(format!("Cada formiga iniciará em um ponto distinto (total: {})", num_points));
+            } else {
+                ui.label(format!("Formigas serão distribuídas aleatoriamente entre os {} pontos", num_points));
+            }
+        }
+        
         ui.add(egui::Slider::new(&mut aco_params.alpha, 0.1..=5.0).text("Alpha (pheromone importance)"));
         ui.add(egui::Slider::new(&mut aco_params.beta, 0.1..=5.0).text("Beta (distance importance)"));
         ui.add(egui::Slider::new(&mut aco_params.rho, 0.0..=1.0).text("Rho (evaporation rate)"));
@@ -356,19 +399,16 @@ fn camera_drag(
 ) {
     let (camera_entity, mut camera_transform, dragging) = query.single_mut();
 
-    // Não adicione o componente Dragging se estiver interagindo com a UI
     if mouse_buttons.just_pressed(MouseButton::Left) && !ui_state.interacting_with_ui {
         commands.entity(camera_entity).insert(Dragging);
     }
 
-    // Sempre remova o componente Dragging se soltar o botão ou se estiver sobre a UI
     if mouse_buttons.just_released(MouseButton::Left) || ui_state.interacting_with_ui {
         if dragging.is_some() {
             commands.entity(camera_entity).remove::<Dragging>();
         }
     }
 
-    // Movimente a câmera apenas se estiver arrastando e não estiver sobre a UI
     if dragging.is_some() && !ui_state.interacting_with_ui {
         for event in mouse_motion_events.read() {
             camera_transform.translation.x -= event.delta.x * camera_transform.scale.x;
@@ -399,11 +439,13 @@ fn camera_zoom(
 fn update_points_visualization(
     mut commands: Commands,
     points: Res<Points>,
+    mut entity_tracker: ResMut<EntityTracker>,
     point_markers: Query<Entity, With<PointMarker>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    if !points.is_changed() && !point_markers.is_empty() {
+    if (!points.is_changed() && !point_markers.is_empty() && !entity_tracker.point_entities.is_empty()) 
+        || points.positions.is_empty() {
         return;
     }
 
@@ -411,11 +453,13 @@ fn update_points_visualization(
         safe_despawn(&mut commands, entity);
     }
 
+    entity_tracker.point_entities.clear();
+
     let circle = meshes.add(Circle::new(5.0));
     let material = materials.add(ColorMaterial::from(Color::WHITE));
 
     for position in &points.positions {
-        commands.spawn((
+        let entity = commands.spawn((
             MaterialMesh2dBundle {
                 mesh: circle.clone().into(),
                 material: material.clone(),
@@ -423,7 +467,9 @@ fn update_points_visualization(
                 ..default()
             },
             PointMarker,
-        ));
+        )).id();
+        
+        entity_tracker.point_entities.push(entity);
     }
 }
 
@@ -431,12 +477,15 @@ fn update_path_visualization(
     mut commands: Commands,
     best_path: Res<BestPath>,
     points: Res<Points>,
+    mut entity_tracker: ResMut<EntityTracker>,
     best_path_lines: Query<Entity, With<BestPathLine>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     if !best_path.is_changed() || best_path.path.is_empty() {
         return;
     }
+
+    safe_despawn_collection(&mut commands, &mut entity_tracker.path_entities);
 
     for entity in best_path_lines.iter() {
         safe_despawn(&mut commands, entity);
@@ -445,6 +494,7 @@ fn update_path_visualization(
     let n = best_path.path.len();
     let _line_material = materials.add(ColorMaterial::from(Color::srgb(0.0, 1.0, 0.0)));
 
+    entity_tracker.path_entities.clear();
     for i in 0..n {
         let from_idx = best_path.path[i];
         let to_idx = best_path.path[(i + 1) % n];
@@ -458,7 +508,7 @@ fn update_path_visualization(
         let direction = to - from;
         let length = direction.length();
 
-        commands.spawn((
+        let entity = commands.spawn((
             SpriteBundle {
                 sprite: Sprite {
                     color: Color::srgb(0.0, 1.0, 0.0),
@@ -473,7 +523,9 @@ fn update_path_visualization(
                 ..default()
             },
             BestPathLine,
-        ));
+        )).id();
+        
+        entity_tracker.path_entities.push(entity);
     }
 }
 
@@ -501,10 +553,42 @@ fn run_aco_algorithm(
 
     let mut ants: Vec<Ant> = (0..aco_params.ant_count).map(|_| Ant::new(n)).collect();
 
-    ants.par_iter_mut().for_each(|ant| {
-        let mut local_rng = thread_rng();
-        ant.construct_solution(&points.positions, &aco_state.pheromones, &mut local_rng, &aco_params);
-    });
+    if aco_params.ant_count <= n {
+        let mut starting_points: Vec<usize> = (0..n).collect();
+        let mut rng = thread_rng();
+        starting_points.shuffle(&mut rng);
+
+        ants.par_iter_mut().enumerate().for_each(|(i, ant)| {
+            let mut local_rng = thread_rng();
+            let start = starting_points[i];
+            ant.visited.fill(false);
+            ant.path.clear();
+            ant.distance = 0.0;
+            
+            ant.path.push(start);
+            ant.visited[start] = true;
+            
+            while ant.path.len() < n {
+                let current = *ant.path.last().unwrap();
+                let next = ant.select_next_city(current, &points.positions, &aco_state.pheromones, &mut local_rng, &aco_params);
+                
+                let distance = points.positions[current].distance(points.positions[next]);
+                ant.distance += distance;
+                
+                ant.path.push(next);
+                ant.visited[next] = true;
+            }
+            
+            let first = ant.path[0];
+            let last = ant.path[n - 1];
+            ant.distance += points.positions[last].distance(points.positions[first]);
+        });
+    } else {
+        ants.par_iter_mut().for_each(|ant| {
+            let mut local_rng = thread_rng();
+            ant.construct_solution(&points.positions, &aco_state.pheromones, &mut local_rng, &aco_params);
+        });
+    }
 
     let mut iteration_best_ant = &ants[0];
     for ant in &ants {
