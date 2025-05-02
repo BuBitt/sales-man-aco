@@ -105,13 +105,23 @@ pub fn ui_system(
         });
 
         ui.add_space(10.0);
+        
+        // Point count control with simplified label
+        ui.add(egui::Slider::new(&mut points.count, 5..=1000).text("Points"));
+        
+        // Add ant count control with simplified label
+        ui.add(egui::Slider::new(&mut aco_params.ant_count, 5..=1000).text("Ants"));
 
+        ui.add_space(8.0);
+        
+        // Center the generate points button
         ui.horizontal(|ui| {
-            ui.add(egui::Slider::new(&mut points.count, 5..=1000)
-                .text(text.points_slider)
-                .logarithmic(true));
-
-            if ui.button(text.generate_points).clicked() {
+            let available_width = ui.available_width();
+            let button_width = 180.0;
+            let offset = (available_width - button_width) / 2.0;
+            
+            ui.add_space(offset);
+            if ui.add_sized([button_width, 28.0], egui::Button::new(text.generate_points)).clicked() {
                 entity_tracker.point_entities.clear();
                 entity_tracker.path_entities.clear();
                 
@@ -146,15 +156,48 @@ pub fn ui_system(
                 let n = points.positions.len();
                 aco_state.pheromones = vec![vec![1.0; n]; n];
             }
+        });
 
-            let button_text = if aco_state.running { text.stop } else { text.start };
-            let mut button_response = ui.button(button_text);
+        ui.add_space(5.0);
+        ui.separator();
+        ui.add_space(5.0);
+        
+        // Dynamic Start/Stop/Run Again button - centered with fixed size
+        ui.horizontal(|ui| {
+            let available_width = ui.available_width();
+            let button_width = 160.0;
+            let offset = (available_width - button_width) / 2.0;
+            
+            ui.add_space(offset);
+            
+            // Determine button text based on algorithm state
+            let button_text = if aco_state.running { 
+                text.stop 
+            } else if aco_state.iterations > 0 && !points.positions.is_empty() { 
+                // If algorithm has run but is stopped, and points exist, show "Run Again"
+                text.run_again 
+            } else { 
+                text.start 
+            };
+            
+            let mut button_response = ui.add_sized(
+                [button_width, 32.0], 
+                egui::Button::new(button_text)
+            );
             
             if !aco_state.running && !points.positions.is_empty() {
-                let tooltip = if app_language.current == Language::English {
-                    "Press to start/restart the algorithm with current parameters on the same points"
+                let tooltip = if aco_state.iterations > 0 {
+                    if app_language.current == Language::English {
+                        "Run the algorithm again with current parameters"
+                    } else {
+                        "Executar o algoritmo novamente com os parâmetros atuais"
+                    }
                 } else {
-                    "Pressione para iniciar/reiniciar o algoritmo com os parâmetros atuais nos mesmos pontos"
+                    if app_language.current == Language::English {
+                        "Press to start/restart the algorithm with current parameters"
+                    } else {
+                        "Pressione para iniciar/reiniciar o algoritmo com os parâmetros atuais"
+                    }
                 };
                 button_response = button_response.on_hover_text(tooltip);
             }
@@ -191,41 +234,66 @@ pub fn ui_system(
             }
         });
 
-        ui.label(text.positions_count.replace("{}", &points.positions.len().to_string()));
-
-        let total_time = if let Some(start_time) = aco_state.start_time {
-            aco_state.elapsed_time + Instant::now().duration_since(start_time)
-        } else {
-            aco_state.elapsed_time
-        };
-
-        let secs = total_time.as_secs();
-        let millis = total_time.subsec_millis();
+        ui.add_space(10.0);
         
-        let mut elapsed_str = String::new();
-        write!(elapsed_str, "{:02}:{:02}.{:03}", secs / 60, secs % 60, millis).unwrap();
-        ui.label(text.elapsed_time.replace("{:02}:{:02}.{:03}", &elapsed_str));
+        // Algorithm Parameters Category - Fix field name consistency
+        egui::CollapsingHeader::new(text.algorithm_parameters)
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.add(egui::Slider::new(&mut aco_params.alpha, 0.1..=5.0).text(text.alpha));
+                ui.add(egui::Slider::new(&mut aco_params.beta, 0.1..=5.0).text(text.beta));
+                ui.add(egui::Slider::new(&mut aco_params.rho, 0.0..=1.0).text(text.rho));
+                ui.add(egui::Slider::new(&mut aco_params.q, 1.0..=1000.0).text(text.q_factor));
 
+                if ui.button(text.reset_parameters).clicked() {
+                    *aco_params = AcoParameters::default();
+                }
+            });
+            
+        // Advanced Settings Category
+        egui::CollapsingHeader::new(text.advanced_settings)
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.label(text.advanced_settings_description);
+                
+                // Consider future addition of these parameters:
+                // - Candidate list size
+                // - Max iterations
+                // - Max iterations without improvement
+            });
+
+        ui.add_space(5.0);
+        
+        // Stats section - keep at bottom
         if !points.positions.is_empty() {
+            ui.label(text.positions_count.replace("{}", &points.positions.len().to_string()));
+
+            let total_time = if let Some(start_time) = aco_state.start_time {
+                aco_state.elapsed_time + Instant::now().duration_since(start_time)
+            } else {
+                aco_state.elapsed_time
+            };
+
+            let secs = total_time.as_secs();
+            let millis = total_time.subsec_millis();
+            
+            let mut elapsed_str = String::new();
+            write!(elapsed_str, "{:02}:{:02}.{:03}", secs / 60, secs % 60, millis).unwrap();
+            ui.label(text.elapsed_time.replace("{:02}:{:02}.{:03}", &elapsed_str));
+
             let standard_time = estimate_standard_algorithm_time(points.positions.len());
             
             let time_display = if standard_time.as_secs() > 86400 * 365 * 1_000_000_000 {
-                // Mais de 1 bilhão de anos (tempo maior que a idade do universo)
                 text.over_universe_age.to_string()
             } else if standard_time.as_secs() > 86400 * 365 * 1_000_000 {
-                // Mais de 1 milhão de anos (10³ milênios)
                 text.over_1000_millennia.to_string()
             } else if standard_time.as_secs() > 86400 * 365 * 10_000 {
-                // Mais de 10 mil anos (10 milênios)
                 text.over_10_millennia.to_string()
             } else if standard_time.as_secs() > 86400 * 365 * 1_000 {
-                // Mais de mil anos (1 milênio)
                 text.over_a_millennium.to_string()
             } else if standard_time.as_secs() > 86400 * 365 * 100 {
-                // Mais de 100 anos (1 século)
                 text.over_a_century.to_string()
             } else if standard_time.as_secs() > 86400 * 365 {
-                // Mais de 1 ano
                 text.over_a_year.to_string()
             } else if standard_time.as_secs() > 86400 * 30 {
                 let months = standard_time.as_secs_f64() / (86400.0 * 30.0);
@@ -246,41 +314,11 @@ pub fn ui_system(
             };
             
             ui.label(text.estimated_time_short.replace("{}", &time_display));
-        }
+            ui.label(text.iterations.replace("{}", &aco_state.iterations.to_string()));
 
-        ui.label(text.iterations.replace("{}", &aco_state.iterations.to_string()));
-
-        if best_path.distance != f32::INFINITY {
-            ui.label(text.best_distance.replace("{:.2}", &format!("{:.2}", best_path.distance)));
-        }
-
-        ui.add_space(5.0);
-        ui.separator();
-        ui.add_space(5.0);
-
-        ui.heading(text.algorithm_parameters);
-        ui.add_space(10.0);
-
-        ui.add(egui::Slider::new(&mut aco_params.ant_count, 5..=1000)
-            .text(text.ant_count)
-            .logarithmic(true));
-        
-        if !points.positions.is_empty() {
-            let num_points = points.positions.len();
-            if aco_params.ant_count <= num_points {
-                ui.label(text.each_ant_starts.replace("{}", &num_points.to_string()));
-            } else {
-                ui.label(text.ants_distributed.replace("{}", &num_points.to_string()));
+            if best_path.distance != f32::INFINITY {
+                ui.label(text.best_distance.replace("{:.2}", &format!("{:.2}", best_path.distance)));
             }
-        }
-        
-        ui.add(egui::Slider::new(&mut aco_params.alpha, 0.1..=5.0).text(text.alpha));
-        ui.add(egui::Slider::new(&mut aco_params.beta, 0.1..=5.0).text(text.beta));
-        ui.add(egui::Slider::new(&mut aco_params.rho, 0.0..=1.0).text(text.rho));
-        ui.add(egui::Slider::new(&mut aco_params.q, 1.0..=1000.0).text(text.q_factor));
-
-        if ui.button(text.reset_parameters).clicked() {
-            *aco_params = AcoParameters::default();
         }
     });
 }
