@@ -115,8 +115,8 @@ pub fn update_path_visualization(
     let n = best_path.path.len();
     
     // Definir materiais para caminhos normais e destacados
-    let line_material = materials.add(ColorMaterial::from(Color::srgba(0.0, 0.9, 0.4, 0.7))); // Verde mais vibrante com transparência
-    let highlight_material = materials.add(ColorMaterial::from(Color::srgba(0.1, 1.0, 0.6, 0.9))); // Verde mais brilhante para destaques
+    let _line_material = materials.add(ColorMaterial::from(Color::srgba(0.0, 0.9, 0.4, 0.7))); // Verde mais vibrante com transparência
+    let _highlight_material = materials.add(ColorMaterial::from(Color::srgba(0.1, 1.0, 0.6, 0.9))); // Verde mais brilhante para destaques
 
     entity_tracker.path_entities.clear();
     for i in 0..n {
@@ -207,34 +207,40 @@ pub fn update_distance_matrix(
         let mut distances = vec![vec![0.0; n]; n];
         
         // Para conjuntos grandes de pontos, usa paralelismo para calcular distâncias
-        if n > 100 {
-            // Implementação paralela para grandes conjuntos de dados
-            distances.par_iter_mut().enumerate().for_each(|(i, row)| {
-                for j in (i+1)..n {
-                    let dist = points.positions[i].distance(points.positions[j]);
-                    row[j] = dist;
-                    // Não podemos preencher distances[j][i] aqui devido às regras de borrowing
-                }
-            });
+        if n > crate::constants::PARALLEL_THRESHOLD {
+            // Dividir o trabalho em chunks por linhas da matriz
+            let chunk_size = n.max(1) / num_cpus::get().max(1);
+            let chunk_size = chunk_size.max(1); // Garantir tamanho mínimo de 1
             
-            // Preenche a outra metade da matriz em uma segunda passagem
-            for i in 0..n {
-                for j in (i+1)..n {
-                    distances[j][i] = distances[i][j]; // A distância é simétrica
+            // Processamento paralelo por linha da matriz
+            let results: Vec<(usize, Vec<f32>)> = (0..n).into_par_iter().map(|i| {
+                let mut row = vec![0.0; n];
+                for j in 0..n {
+                    if i != j {
+                        row[j] = points.positions[i].distance(points.positions[j]);
+                    }
                 }
+                (i, row)
+            }).collect();
+            
+            // Integrar os resultados computados em paralelo
+            for (i, row) in results {
+                distances[i] = row;
             }
         } else {
             // Implementação sequencial para conjuntos pequenos
             for i in 0..n {
-                for j in (i+1)..n {
-                    let dist = points.positions[i].distance(points.positions[j]);
-                    distances[i][j] = dist;
-                    distances[j][i] = dist; // A distância é simétrica
+                for j in 0..n {
+                    if i != j {
+                        let dist = points.positions[i].distance(points.positions[j]);
+                        distances[i][j] = dist;
+                    }
                 }
             }
         }
         
         distance_matrix.distances = distances;
+        distance_matrix.set_changed();
     }
 }
 

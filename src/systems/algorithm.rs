@@ -6,6 +6,10 @@ use crate::resources::*;
 use crate::aco::{Ant, apply_2opt};
 use crate::constants::*;
 
+/// Sistema principal que executa o algoritmo ACO
+/// 
+/// Este sistema é responsável por executar o algoritmo de otimização
+/// de colônia de formigas para resolver o TSP.
 pub fn run_aco_algorithm(
     mut aco_state: ResMut<AcoState>,
     points: Res<Points>,
@@ -14,101 +18,105 @@ pub fn run_aco_algorithm(
     distance_matrix: Res<DistanceMatrix>,
     candidate_lists: Res<CandidateList>,
 ) {
-    if !aco_state.running || points.positions.is_empty() || distance_matrix.distances.is_empty() {
+    if !aco_state.running || points.positions.is_empty() {
+        return;
+    }
+
+    // Iniciar cronômetro se ainda não iniciado
+    if aco_state.start_time.is_none() {
+        aco_state.start_time = Some(Instant::now());
+    }
+
+    // Se já atingiu o máximo de iterações, para o algoritmo
+    if aco_state.iterations >= crate::constants::MAX_ITERATIONS {
+        aco_state.running = false;
+        if let Some(start_time) = aco_state.start_time {
+            aco_state.elapsed_time += Instant::now().duration_since(start_time);
+            aco_state.start_time = None;
+        }
+        return;
+    }
+
+    // Se não houve melhoria após várias iterações, para o algoritmo
+    if aco_state.iterations_since_improvement >= crate::constants::MAX_ITERATIONS_WITHOUT_IMPROVEMENT {
+        aco_state.running = false;
+        if let Some(start_time) = aco_state.start_time {
+            aco_state.elapsed_time += Instant::now().duration_since(start_time);
+            aco_state.start_time = None;
+        }
         return;
     }
 
     let n = points.positions.len();
     
-    // Ensure pheromones matrix matches current point count
-    if aco_state.pheromones.len() != n {
-        aco_state.pheromones = vec![vec![1.0; n]; n];
-    }
-    
-    if aco_state.iterations_since_improvement > MAX_ITERATIONS_WITHOUT_IMPROVEMENT {
-        aco_state.running = false;
-        if let Some(start_time) = aco_state.start_time {
-            aco_state.elapsed_time += Instant::now().duration_since(start_time);
-            aco_state.start_time = None;
-        }
-        return;
-    }
-
-    if aco_state.iterations >= MAX_ITERATIONS {
-        aco_state.running = false;
-        if let Some(start_time) = aco_state.start_time {
-            aco_state.elapsed_time += Instant::now().duration_since(start_time);
-            aco_state.start_time = None;
-        }
-        return;
-    }
+    // Em problemas grandes, usar um número reduzido mas suficiente de formigas
+    let effective_ant_count = if n > crate::constants::PARALLEL_THRESHOLD {
+        (aco_params.ant_count / 4).max(20) // Reduz número de formigas mas mantém mínimo de 20
+    } else {
+        aco_params.ant_count
+    };
 
     aco_state.iterations += 1;
     aco_state.iterations_since_improvement += 1;
     
-    let mut ants: Vec<Ant> = (0..aco_params.ant_count).map(|_| Ant::new(n)).collect();
+    // Criar formigas com o tamanho apropriado
+    let mut ants: Vec<Ant> = (0..effective_ant_count).map(|_| Ant::new(n)).collect();
 
-    if aco_params.ant_count <= n {
-        let mut starting_points: Vec<usize> = (0..n).collect();
-        let mut rng = thread_rng();
-        starting_points.shuffle(&mut rng);
+    // Verificação de segurança para garantir acesso seguro à matriz de distâncias
+    if distance_matrix.distances.len() != n || n == 0 {
+        return;
+    }
 
-        ants.par_iter_mut().enumerate().for_each(|(i, ant)| {
-            let mut local_rng = thread_rng();
-            let start = if i < starting_points.len() {
-                starting_points[i] 
+    // Distribuir formigas nos pontos de partida
+    let mut starting_points: Vec<usize> = (0..n).collect();
+    let mut rng = thread_rng();
+    starting_points.shuffle(&mut rng);
+
+    ants.par_iter_mut().enumerate().for_each(|(i, ant)| {
+        let mut local_rng = thread_rng();
+        let start = if i < starting_points.len() {
+            starting_points[i] 
+        } else {
+            starting_points[i % starting_points.len()]
+        };
+        
+        ant.visited.fill(false);
+        ant.path.clear();
+        ant.distance = 0.0;
+        
+        ant.path.push(start);
+        ant.visited[start] = true;
+        
+        while ant.path.len() < n {
+            let current = *ant.path.last().unwrap();
+            let next = if !candidate_lists.nearest_neighbors.is_empty() {
+                ant.select_next_city_with_candidates(
+                    current, 
+                    &aco_state.pheromones, 
+                    &mut local_rng, 
+                    &aco_params,
+                    &distance_matrix.distances,
+                    &candidate_lists.nearest_neighbors
+                )
             } else {
-                starting_points[i % starting_points.len()]
+                ant.select_next_city(
+                    current, 
+                    &aco_state.pheromones, 
+                    &mut local_rng, 
+                    &aco_params,
+                    &distance_matrix.distances
+                )
             };
             
-            ant.visited.fill(false);
-            ant.path.clear();
-            ant.distance = 0.0;
-            
-            ant.path.push(start);
-            ant.visited[start] = true;
-            
-            while ant.path.len() < n {
-                let current = *ant.path.last().unwrap();
-                let next = if !candidate_lists.nearest_neighbors.is_empty() {
-                    ant.select_next_city_with_candidates(
-                        current, 
-                        &aco_state.pheromones, 
-                        &mut local_rng, 
-                        &aco_params,
-                        &distance_matrix.distances,
-                        &candidate_lists.nearest_neighbors
-                    )
-                } else {
-                    ant.select_next_city(
-                        current, 
-                        &aco_state.pheromones, 
-                        &mut local_rng, 
-                        &aco_params,
-                        &distance_matrix.distances
-                    )
-                };
-                
-                ant.distance += distance_matrix.distances[current][next];
-                ant.path.push(next);
-                ant.visited[next] = true;
-            }
-            
-            let first = ant.path[0];
-            let last = ant.path[n - 1];
-            ant.distance += distance_matrix.distances[last][first];
-        });
-    } else {
-        ants.par_iter_mut().for_each(|ant| {
-            let mut local_rng = thread_rng();
-            ant.construct_solution(
-                &distance_matrix.distances, 
-                &aco_state.pheromones, 
-                &mut local_rng, 
-                &aco_params
-            );
-        });
-    }
+            ant.distance += distance_matrix.distances[current][next];
+            ant.path.push(next);
+            ant.visited[next] = true;
+        }
+        
+        let first = ant.path[0];
+        let last = ant.path[n - 1];
+        ant.distance += distance_matrix.distances[last][first];
+    });
 
     let mut iteration_best_ant = &ants[0];
     for ant in &ants {

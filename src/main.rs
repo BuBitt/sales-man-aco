@@ -91,9 +91,9 @@ fn main() {
             Update, 
             run_aco_algorithm
                 .run_if(|state: Res<AcoState>, points: Res<Points>| {
-                    if points.positions.len() > 100 {
-                        // Para problemas grandes, executa menos frequentemente para melhor desempenho
-                        state.running && state.iterations % 5 == 0
+                    if points.positions.len() > crate::constants::PARALLEL_THRESHOLD {
+                        // Para problemas grandes, ajustamos a frequência mas garantimos execução contínua
+                        state.running && (state.iterations == 0 || state.iterations % 3 == 0)
                     } else {
                         state.running
                     }
