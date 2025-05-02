@@ -24,6 +24,7 @@ use systems::*;
 use plugins::ui_plugin::UISetupPlugin;
 use plugins::aco_plugin::AcoPlugin;
 use plugins::visualization_plugin::VisualizationPlugin;
+use plugins::gpu_plugin::GpuAccelerationPlugin; // Plugin personalizado para computação em GPU
 
 /// Macro utilitária para formatação de strings
 /// 
@@ -48,7 +49,7 @@ fn main() {
                     ..default()
                 })
                 .set(AssetPlugin {
-                    watch_for_changes_override: Some(true),
+                    watch_for_changes_override: Some(false), // Desativar em release para melhor performance
                     ..default()
                 })
                 .set(bevy::log::LogPlugin {
@@ -60,8 +61,23 @@ fn main() {
             UISetupPlugin,
             AcoPlugin,
             VisualizationPlugin,
+            GpuAccelerationPlugin, // Plugin personalizado para computação em GPU
         ))
         .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.1)))
+        // Configurações para gerenciamento de memória otimizado
+        .insert_resource(MemoryConfig {
+            use_arena_allocation: true,
+            reuse_vectors: true,
+            vector_pool_size: 512,
+            max_points_in_view: 2000,
+        })
+        // Configurações para aceleração de GPU
+        .insert_resource(GpuConfig {
+            enabled: true,
+            use_gpu_threshold: 100, // Usar GPU para problemas com mais de 100 pontos
+            compute_shader_path: "shaders/aco_compute.glsl",
+            opengl_version: GlVersion::GL4_6,
+        })
         // Inicializa os recursos do aplicativo
         .insert_resource(AcoState::default())
         .insert_resource(Points::new())
@@ -72,8 +88,9 @@ fn main() {
         .insert_resource(DistanceMatrix::default())
         .insert_resource(CandidateList::default())
         .insert_resource(AppLanguage::default())
+        .insert_resource(VectorPool::new(512)) // Pool de vetores reutilizáveis
         .add_systems(Startup, setup)
-        .add_systems(Update, (handle_input, camera_drag, camera_zoom))
+        .add_systems(Update, (handle_input, camera_drag, camera_zoom, manage_memory))
         .run();
 }
 
