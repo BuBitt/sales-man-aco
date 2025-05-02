@@ -14,6 +14,7 @@ pub struct UiText {
     pub over_a_millennium: &'static str, 
     pub over_10_millennia: &'static str,
     pub over_1000_millennia: &'static str,
+    pub over_universe_age: &'static str, // Time longer than universe age
     pub months: &'static str,
     pub days: &'static str,
     pub hours: &'static str,
@@ -44,12 +45,13 @@ pub fn get_text(language: Language) -> UiText {
             positions_count: "Positions count: {}",
             elapsed_time: "Elapsed: {:02}:{:02}.{:03}",
             estimated_time: "Estimated time for standard algorithm: {}",
-            estimated_time_short: "Est. brute-force time: {}", // Versão compacta
+            estimated_time_short: "Est. brute-force: {}", // Versão compacta
             over_a_year: "over a year (impractical)",
             over_a_century: "over a century (impossible)",
             over_a_millennium: "over a millennium (absurd)",
             over_10_millennia: "over 10 millennia (cosmic)",
             over_1000_millennia: "over 10³ millennia (universal)",
+            over_universe_age: "over 10¹⁰ millennia (heat death of universe)",
             months: "{:.1} months",
             days: "{:.1} days",
             hours: "{:.1} hours",
@@ -83,6 +85,7 @@ pub fn get_text(language: Language) -> UiText {
             over_a_millennium: "mais de um milênio (absurdo)",
             over_10_millennia: "mais de 10 milênios (cósmico)",
             over_1000_millennia: "mais de 10³ milênios (universal)",
+            over_universe_age: "mais de 10¹⁰ milênios (morte térmica do universo)",
             months: "{:.1} meses",
             days: "{:.1} dias",
             hours: "{:.1} horas",

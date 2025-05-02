@@ -1,9 +1,6 @@
 use bevy::{
     prelude::*,
-    render::{
-        render_resource::{ShaderType, StorageBuffer},
-        renderer::RenderDevice,
-    },
+    render::renderer::RenderDevice,
 };
 use crate::resources::*;
 
@@ -33,12 +30,12 @@ fn setup_gpu(
     
     info!("Inicializando recursos para aceleração em GPU (OpenGL {:?})", gpu_config.opengl_version);
     
-    // Carrega shader de computação
-    let shader_handle = asset_server.load(gpu_config.compute_shader_path);
+    // Carrega shader de computação com tipo específico
+    let shader_handle: Handle<Shader> = asset_server.load(gpu_config.compute_shader_path);
     
     commands.insert_resource(GpuResources {
         initialized: false,
-        shader_handle: Some(shader_handle),
+        shader_handle: None, // No underscore
         distance_buffer: None,
         pheromone_buffer: None,
         result_buffer: None,
@@ -50,7 +47,7 @@ fn update_gpu_resources(
     points: Res<Points>,
     gpu_config: Res<GpuConfig>,
     mut gpu_resources: ResMut<GpuResources>,
-    render_device: Res<RenderDevice>,
+    _render_device: Res<RenderDevice>,
 ) {
     // Só executar computações em GPU se exceder o limite configurado
     if points.positions.len() <= gpu_config.use_gpu_threshold {
@@ -59,19 +56,11 @@ fn update_gpu_resources(
     
     // Inicializa buffers OpenGL apenas na primeira vez ou quando redimensionar
     if !gpu_resources.initialized || gpu_resources.distance_buffer.is_none() {
-        // Implementação real usaria bindings da API OpenGL
-        // Aqui estamos apenas simulando a criação dos buffers
-        
         info!("Criando buffers GPU para {} pontos", points.positions.len());
         
-        // Em uma implementação real, usaríamos código como:
-        // let buffer_size = std::mem::size_of::<f32>() * points.positions.len() * points.positions.len();
-        // let buffer = render_device.create_buffer(...);
-        // gpu_resources.distance_buffer = Some(buffer);
-        
-        // Por enquanto apenas simulamos:
+        // Simulação básica de criação de buffers
         gpu_resources.initialized = true;
-        gpu_resources.distance_buffer = Some(1); // Simulação de handle OpenGL
+        gpu_resources.distance_buffer = Some(1); // Valor simulado
         gpu_resources.pheromone_buffer = Some(2);
         gpu_resources.result_buffer = Some(3);
     }

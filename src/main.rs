@@ -66,18 +66,18 @@ fn main() {
         .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.1)))
         // Configurações para gerenciamento de memória otimizado
         .insert_resource(MemoryConfig {
-            use_arena_allocation: true,
-            reuse_vectors: true,
-            vector_pool_size: 512,
             max_points_in_view: 2000,
+            use_arena_allocation: true,      // No underscore
+            reuse_vectors: true,             // No underscore
+            vector_pool_size: 512,           // No underscore
         })
         // Configurações para aceleração de GPU - ajustada para compatibilidade
         .insert_resource(GpuConfig {
             enabled: true,
             use_gpu_threshold: 100, // Usar GPU para problemas com mais de 100 pontos
-            compute_shader_path: "shaders/aco_compute.glsl",
+            compute_shader_path: "shaders/aco_compute.wgsl", // Mudado para extensão .wgsl
             opengl_version: GlVersion::GL4_6,
-            synchronize_with_cpu: true, // Garante sincronização entre CPU e GPU
+            synchronize_with_cpu: true, // No underscore
         })
         // Inicializa os recursos do aplicativo
         .insert_resource(AcoState::default())

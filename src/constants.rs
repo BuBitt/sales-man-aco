@@ -34,6 +34,5 @@ pub const MAX_ITERATIONS_WITHOUT_IMPROVEMENT: u32 = 50;
 /// Para problemas com mais pontos que este limite, usa-se paralelização
 pub const PARALLEL_THRESHOLD: usize = 100;
 
-/// Frequência de aplicação da busca local
-/// A cada X iterações, aplica-se um refinamento de busca local (2-opt)
-pub const LOCAL_SEARCH_FREQUENCY: u32 = 10;
+// pub const LOCAL_SEARCH_FREQUENCY: u32 = 10;
+// pub const USE_LOCAL_SEARCH: bool = true;

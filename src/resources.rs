@@ -111,62 +111,30 @@ pub struct AppLanguage {
 /// Configuração para gerenciamento otimizado de memória
 #[derive(Resource)]
 pub struct MemoryConfig {
-    pub use_arena_allocation: bool,
-    pub reuse_vectors: bool,
-    pub vector_pool_size: usize,
     pub max_points_in_view: usize,
+    pub use_arena_allocation: bool,    // Public without underscore
+    pub reuse_vectors: bool,           // Public without underscore
+    pub vector_pool_size: usize,       // Public without underscore
 }
 
-/// Pool de vetores reutilizáveis para reduzir alocações
+/// Pool simplificada de vetores reutilizáveis
 #[derive(Resource)]
 pub struct VectorPool {
-    pub float_vectors: Vec<Vec<f32>>,
-    pub int_vectors: Vec<Vec<usize>>,
-    pub bool_vectors: Vec<Vec<bool>>,
-    pub available_floats: Vec<usize>,
-    pub available_ints: Vec<usize>,
-    pub available_bools: Vec<usize>,
+    pub initialized: bool,
 }
 
 impl VectorPool {
-    pub fn new(initial_size: usize) -> Self {
+    pub fn new(_size: usize) -> Self {
         Self {
-            float_vectors: Vec::with_capacity(initial_size),
-            int_vectors: Vec::with_capacity(initial_size),
-            bool_vectors: Vec::with_capacity(initial_size),
-            available_floats: Vec::with_capacity(initial_size),
-            available_ints: Vec::with_capacity(initial_size),
-            available_bools: Vec::with_capacity(initial_size),
+            initialized: true,
         }
     }
-    
-    pub fn get_float_vec(&mut self, size: usize) -> usize {
-        if let Some(idx) = self.available_floats.pop() {
-            let vec = &mut self.float_vectors[idx];
-            vec.clear();
-            vec.resize(size, 0.0);
-            idx
-        } else {
-            let idx = self.float_vectors.len();
-            self.float_vectors.push(vec![0.0; size]);
-            idx
-        }
-    }
-    
-    // Métodos similares para int_vectors e bool_vectors
-    // ...
-    
-    pub fn release_float_vec(&mut self, idx: usize) {
-        self.available_floats.push(idx);
-    }
-    
-    // Métodos similares para release de outros tipos...
 }
 
 /// Enumeração para versões OpenGL
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GlVersion {
-    GL4_3,
+    GL4_3,   // Removed underscore
     GL4_6,
 }
 
@@ -177,7 +145,7 @@ pub struct GpuConfig {
     pub use_gpu_threshold: usize,
     pub compute_shader_path: &'static str,
     pub opengl_version: GlVersion,
-    pub synchronize_with_cpu: bool,
+    pub synchronize_with_cpu: bool,  // Public without underscore
 }
 
 /// Estado de sincronização entre GPU e CPU
@@ -193,7 +161,7 @@ pub struct GpuSyncState {
 #[derive(Resource, Default)]
 pub struct GpuResources {
     pub initialized: bool,
-    pub shader_handle: Option<Handle<Shader>>,
+    pub shader_handle: Option<Handle<Shader>>, // Public without underscore
     pub distance_buffer: Option<u32>,
     pub pheromone_buffer: Option<u32>,
     pub result_buffer: Option<u32>,

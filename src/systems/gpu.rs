@@ -4,7 +4,7 @@ use crate::resources::*;
 /// Sistema para sincronizar operações entre GPU e CPU
 pub fn gpu_sync_system(
     mut gpu_sync: ResMut<GpuSyncState>,
-    mut aco_state: ResMut<AcoState>,
+    aco_state: ResMut<AcoState>,
     points: Res<Points>,
     gpu_config: Res<GpuConfig>,
 ) {
