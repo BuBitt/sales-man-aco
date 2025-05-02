@@ -236,14 +236,29 @@ pub fn ui_system(
 
         ui.add_space(10.0);
         
-        // Algorithm Parameters Category - Fix field name consistency
+        // Algorithm Parameters Category - Add tooltip explanations
         egui::CollapsingHeader::new(text.algorithm_parameters)
             .default_open(false)
             .show(ui, |ui| {
-                ui.add(egui::Slider::new(&mut aco_params.alpha, 0.1..=5.0).text(text.alpha));
-                ui.add(egui::Slider::new(&mut aco_params.beta, 0.1..=5.0).text(text.beta));
-                ui.add(egui::Slider::new(&mut aco_params.rho, 0.0..=1.0).text(text.rho));
-                ui.add(egui::Slider::new(&mut aco_params.q, 1.0..=1000.0).text(text.q_factor));
+                ui.add(egui::Slider::new(&mut aco_params.alpha, 0.1..=5.0).text(text.alpha))
+                    .on_hover_text("Alpha: Controls the influence of pheromone trails.\n\
+                                   Higher values = ants follow existing paths more closely.\n\
+                                   Lower values = more exploration of new paths.");
+                
+                ui.add(egui::Slider::new(&mut aco_params.beta, 0.1..=5.0).text(text.beta))
+                    .on_hover_text("Beta: Controls the influence of distance between cities.\n\
+                                   Higher values = ants prefer shorter distances.\n\
+                                   Lower values = less greedy, more exploration.");
+                
+                ui.add(egui::Slider::new(&mut aco_params.rho, 0.0..=1.0).text(text.rho))
+                    .on_hover_text("Rho: Pheromone evaporation rate.\n\
+                                   Higher values = faster forgetting of poorer paths.\n\
+                                   Lower values = more persistence of historical information.");
+                
+                ui.add(egui::Slider::new(&mut aco_params.q, 1.0..=1000.0).text(text.q_factor))
+                    .on_hover_text("Q: Pheromone deposit quantity factor.\n\
+                                   Controls how much pheromone ants deposit on paths.\n\
+                                   Higher values = stronger reinforcement of good paths.");
 
                 if ui.button(text.reset_parameters).clicked() {
                     *aco_params = AcoParameters::default();
@@ -259,9 +274,14 @@ pub fn ui_system(
                 
                 // Performance Mode toggle
                 let mut performance_mode = aco_state.performance_mode.unwrap_or(false);
-                if ui.checkbox(&mut performance_mode, "High Performance Mode").changed() {
+                let perf_checkbox = ui.checkbox(&mut performance_mode, "High Performance Mode");
+                if perf_checkbox.changed() {
                     aco_state.performance_mode = Some(performance_mode);
                 }
+                perf_checkbox.on_hover_text(
+                    "Optimizes computation and rendering to improve framerate with many points.\n\
+                    Recommended for problems with 100+ points or older hardware."
+                );
                 
                 if performance_mode {
                     ui.label("Reduces computational load for better performance");
@@ -278,14 +298,19 @@ pub fn ui_system(
                 
                 // Ant count control with performance warning
                 ui.horizontal(|ui| {
-                    ui.label("Ant Count:");
+                    ui.label("Ant Count:")
+                        .on_hover_text("Number of ants exploring the graph in each iteration.\n\
+                                      More ants = better solutions but slower performance.\n\
+                                      For large problems, 30-50 ants is often sufficient.");
                     if ui.small_button("Auto").clicked() {
                         aco_params.ant_count = auto_ant_count;
                     }
                 });
                 
                 let prev_ant_count = aco_params.ant_count;
-                ui.add(egui::Slider::new(&mut aco_params.ant_count, 5..=1000).text(""));
+                ui.add(egui::Slider::new(&mut aco_params.ant_count, 5..=1000).text(""))
+                    .on_hover_text("Ant count significantly impacts performance.\n\
+                                   Complexity: O(iterations × ants × points²)");
                 
                 // Show performance impact warning for large ant counts
                 if aco_params.ant_count >= 100 && points.positions.len() >= 50 {
@@ -302,7 +327,9 @@ pub fn ui_system(
                     ui.add_space(5.0);
                     let mut viz_frequency = aco_state.visualization_frequency.unwrap_or(1);
                     ui.horizontal(|ui| {
-                        ui.label("Visualization Rate:");
+                        ui.label("Visualization Rate:")
+                            .on_hover_text("How often the display updates during computation.\n\
+                                          Higher values = smoother UI but less visual feedback.");
                         if ui.small_button("Auto").clicked() {
                             // Automatically adjust visualization frequency based on problem size
                             viz_frequency = if points.positions.len() * aco_params.ant_count > 10000 {
@@ -324,9 +351,14 @@ pub fn ui_system(
                 
                 // Parallel execution options
                 let mut parallel_ants = aco_state.parallel_ants.unwrap_or(true);
-                if ui.checkbox(&mut parallel_ants, "Parallel Ant Processing").changed() {
+                let parallel_checkbox = ui.checkbox(&mut parallel_ants, "Parallel Ant Processing");
+                if parallel_checkbox.changed() {
                     aco_state.parallel_ants = Some(parallel_ants);
                 }
+                parallel_checkbox.on_hover_text(
+                    "Uses multiple CPU cores to process ants in parallel.\n\
+                    Disable on very old hardware if you experience issues."
+                );
                 
                 // Add candidate list size control with safe bounds
                 let mut candidate_list_size = aco_state.candidate_list_size.unwrap_or(20);
@@ -336,7 +368,10 @@ pub fn ui_system(
                 
                 ui.add_space(5.0);
                 ui.horizontal(|ui| {
-                    ui.label("Neighbor Candidates:");
+                    ui.label("Neighbor Candidates:")
+                        .on_hover_text("The number of closest cities each ant considers at each step.\n\
+                                       Smaller values = faster computation but potentially lower quality solutions.\n\
+                                       Larger values = better solutions but slower computation.");
                     if ui.small_button("Auto").clicked() {
                         // For large problems, use smaller candidate list
                         candidate_list_size = if points.positions.len() > 100 {
@@ -355,14 +390,22 @@ pub fn ui_system(
                 
                 ui.add_space(2.0);
                 
+                // Add max iterations control
+                ui.label("Max Iterations:")
+                    .on_hover_text("Maximum number of algorithm iterations before stopping.\n\
+                                   Higher values allow finding better solutions but take longer.");
                 let mut max_iterations = aco_state.max_iterations.unwrap_or(1000);
-                if ui.add(egui::Slider::new(&mut max_iterations, 100..=5000).text("Max Iterations")).changed() {
+                if ui.add(egui::Slider::new(&mut max_iterations, 100..=5000).text("")).changed() {
                     aco_state.max_iterations = Some(max_iterations);
                 }
                 ui.add_space(2.0);
                 
+                // Add max iterations without improvement control
+                ui.label("Max No Improvement:")
+                    .on_hover_text("Stops the algorithm early if no better solution is found after this many iterations.\n\
+                                   Lower values = faster termination, higher values = more thorough search.");
                 let mut max_no_improvement = aco_state.max_iterations_no_improvement.unwrap_or(50);
-                if ui.add(egui::Slider::new(&mut max_no_improvement, 10..=500).text("Max No Improvement")).changed() {
+                if ui.add(egui::Slider::new(&mut max_no_improvement, 10..=500).text("")).changed() {
                     aco_state.max_iterations_no_improvement = Some(max_no_improvement);
                 }
                 
