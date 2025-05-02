@@ -8,6 +8,7 @@ pub struct UiText {
     pub positions_count: &'static str,
     pub elapsed_time: &'static str,
     pub estimated_time: &'static str,
+    pub estimated_time_short: &'static str, // Versão compacta
     pub over_a_year: &'static str,
     pub months: &'static str,
     pub days: &'static str,
@@ -39,6 +40,7 @@ pub fn get_text(language: Language) -> UiText {
             positions_count: "Positions count: {}",
             elapsed_time: "Elapsed: {:02}:{:02}.{:03}",
             estimated_time: "Estimated time for standard algorithm: {}",
+            estimated_time_short: "Est. brute-force time: {}", // Versão compacta
             over_a_year: "over a year (impractical)",
             months: "{:.1} months",
             days: "{:.1} days",
@@ -67,6 +69,7 @@ pub fn get_text(language: Language) -> UiText {
             positions_count: "Total de posições: {}",
             elapsed_time: "Tempo decorrido: {:02}:{:02}.{:03}",
             estimated_time: "Tempo estimado para algoritmo padrão: {}",
+            estimated_time_short: "Est. força bruta: {}", // Versão compacta
             over_a_year: "mais de um ano (impraticável)",
             months: "{:.1} meses",
             days: "{:.1} dias",

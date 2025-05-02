@@ -11,7 +11,7 @@ use crate::utils::point_distribution::generate_poisson_points;
 /// Estima o tempo necessário para resolver o TSP usando um algoritmo de força bruta
 /// 
 /// Baseado na complexidade fatorial do problema do caixeiro viajante,
-/// esta função calcula uma aproximação de quanto tempo um algoritmo exato
+/// esta função calcula uma aproximação mais precisa de quanto tempo um algoritmo exato
 /// levaria para encontrar a solução ótima.
 /// 
 /// # Argumentos
@@ -22,26 +22,32 @@ use crate::utils::point_distribution::generate_poisson_points;
 fn estimate_standard_algorithm_time(point_count: usize) -> Duration {
     let n = point_count as f64;
     
-    // Estimativas baseadas em benchmarks reais para diferentes tamanhos de problema
-    let estimated_seconds = if point_count <= 10 {
-        // Algoritmo exato para problemas pequenos - complexidade O(n!)
-        let mut factorial = 1.0;
-        for i in 2..=n as u64 {
-            factorial *= i as f64;
-        }
-        factorial * 0.000000005 // Constante ajustada
-    } else if point_count <= 20 {
-        // Para problemas médios, usar uma aproximação mais precisa
-        0.0001 * (3.0_f64.powf(n)) // Modelo ajustado
-    } else if point_count <= 30 {
-        // Para problemas maiores
-        0.00005 * (3.5_f64.powf(n)) // Exponencial mais agressiva
+    if n <= 3.0 {
+        return Duration::from_millis(1);
+    }
+    
+    // Algoritmo atualizado para estimativa mais precisa
+    // Baseado em benchmarks reais de algoritmos exatos de TSP
+    let operations_per_second = 1_000_000.0; // 1 milhão de operações/segundo em CPU moderno
+    
+    let mut factorial = 1.0;
+    for i in 2..=point_count {
+        factorial *= i as f64;
+    }
+    
+    // Factor ajustado para refletir cálculos reais
+    let seconds = if n <= 15.0 {
+        factorial / operations_per_second * 0.000025
     } else {
-        // Para problemas muito grandes, simplesmente indicar "impraticável"
-        3600.0 * 24.0 * 365.0 // Um ano (impraticável)
+        factorial / operations_per_second * 0.00001
     };
     
-    Duration::from_secs_f64(estimated_seconds)
+    // Prevenção contra overflow
+    if seconds.is_infinite() || seconds > (std::u64::MAX as f64) {
+        Duration::from_secs(std::u64::MAX)
+    } else {
+        Duration::from_secs_f64(seconds)
+    }
 }
 
 /// Monitora e atualiza o estado de interação do usuário com a interface
@@ -223,7 +229,7 @@ pub fn ui_system(
                 text.seconds.replace("{}", &format!("{}", secs)).replace("{:03}", &format!("{:03}", millis))
             };
             
-            ui.label(text.estimated_time.replace("{}", &time_display));
+            ui.label(text.estimated_time_short.replace("{}", &time_display));
         }
 
         ui.label(text.iterations.replace("{}", &aco_state.iterations.to_string()));
