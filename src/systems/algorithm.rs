@@ -16,9 +16,16 @@ pub fn run_aco_algorithm(
     aco_params: Res<AcoParameters>,
     distance_matrix: Res<DistanceMatrix>,
     candidate_lists: Res<CandidateList>,
+    gpu_config: Res<GpuConfig>,
+    mut gpu_sync: ResMut<GpuSyncState>,
 ) {
     if !aco_state.running || points.positions.is_empty() {
         return;
+    }
+
+    // Atualiza estado de sincronização GPU para esta iteração
+    if points.positions.len() > gpu_config.use_gpu_threshold && gpu_config.enabled {
+        gpu_sync.iteration_ready = false;
     }
 
     // Iniciar cronômetro se ainda não iniciado
@@ -55,6 +62,7 @@ pub fn run_aco_algorithm(
         aco_params.ant_count
     };
 
+    // Incrementa iteração após todo o processamento
     aco_state.iterations += 1;
     aco_state.iterations_since_improvement += 1;
     

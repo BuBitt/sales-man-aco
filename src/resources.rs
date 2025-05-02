@@ -177,6 +177,16 @@ pub struct GpuConfig {
     pub use_gpu_threshold: usize,
     pub compute_shader_path: &'static str,
     pub opengl_version: GlVersion,
+    pub synchronize_with_cpu: bool,
+}
+
+/// Estado de sincronização entre GPU e CPU
+#[derive(Resource, Default)]
+pub struct GpuSyncState {
+    pub computation_completed: bool,
+    pub iteration_ready: bool,
+    pub last_processed_iteration: u32,
+    pub frame_skip_counter: u32,
 }
 
 /// Recursos para cálculos em GPU
