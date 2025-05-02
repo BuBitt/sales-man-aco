@@ -209,7 +209,20 @@ pub fn ui_system(
         if !points.positions.is_empty() {
             let standard_time = estimate_standard_algorithm_time(points.positions.len());
             
-            let time_display = if standard_time.as_secs() > 86400 * 365 {
+            let time_display = if standard_time.as_secs() > 86400 * 365 * 1000 * 1000 {
+                // Mais de 1 milhão de anos (10³ milênios)
+                text.over_1000_millennia.to_string()
+            } else if standard_time.as_secs() > 86400 * 365 * 10000 {
+                // Mais de 10 mil anos (10 milênios)
+                text.over_10_millennia.to_string()
+            } else if standard_time.as_secs() > 86400 * 365 * 1000 {
+                // Mais de mil anos (1 milênio)
+                text.over_a_millennium.to_string()
+            } else if standard_time.as_secs() > 86400 * 365 * 100 {
+                // Mais de 100 anos (1 século)
+                text.over_a_century.to_string()
+            } else if standard_time.as_secs() > 86400 * 365 {
+                // Mais de 1 ano
                 text.over_a_year.to_string()
             } else if standard_time.as_secs() > 86400 * 30 {
                 let months = standard_time.as_secs_f64() / (86400.0 * 30.0);

@@ -10,6 +10,10 @@ pub struct UiText {
     pub estimated_time: &'static str,
     pub estimated_time_short: &'static str, // Versão compacta
     pub over_a_year: &'static str,
+    pub over_a_century: &'static str,
+    pub over_a_millennium: &'static str, 
+    pub over_10_millennia: &'static str,
+    pub over_1000_millennia: &'static str,
     pub months: &'static str,
     pub days: &'static str,
     pub hours: &'static str,
@@ -42,6 +46,10 @@ pub fn get_text(language: Language) -> UiText {
             estimated_time: "Estimated time for standard algorithm: {}",
             estimated_time_short: "Est. brute-force time: {}", // Versão compacta
             over_a_year: "over a year (impractical)",
+            over_a_century: "over a century (impossible)",
+            over_a_millennium: "over a millennium (absurd)",
+            over_10_millennia: "over 10 millennia (cosmic)",
+            over_1000_millennia: "over 10³ millennia (universal)",
             months: "{:.1} months",
             days: "{:.1} days",
             hours: "{:.1} hours",
@@ -71,6 +79,10 @@ pub fn get_text(language: Language) -> UiText {
             estimated_time: "Tempo estimado para algoritmo padrão: {}",
             estimated_time_short: "Est. força bruta: {}", // Versão compacta
             over_a_year: "mais de um ano (impraticável)",
+            over_a_century: "mais de um século (impossível)",
+            over_a_millennium: "mais de um milênio (absurdo)",
+            over_10_millennia: "mais de 10 milênios (cósmico)",
+            over_1000_millennia: "mais de 10³ milênios (universal)",
             months: "{:.1} meses",
             days: "{:.1} dias",
             hours: "{:.1} horas",
