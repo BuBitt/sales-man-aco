@@ -81,12 +81,17 @@ fn main() {
 fn setup(
     mut commands: Commands,
 ) {
-    // Configuração da câmera principal com zoom out e deslocamento maior para a direita
+    // Spawn da câmera principal
+    // 
+    // Configura uma câmera 2D com:
+    // - Deslocamento para a esquerda para manter a área de visualização
+    //   afastada da interface do usuário
+    // - Zoom ajustado para melhor visualização do campo de trabalho
     commands.spawn((
         Camera2dBundle {
             transform: Transform {
-                translation: Vec3::new(-250.0, 0.0, 0.0), // Aumentado o deslocamento para a direita
-                scale: Vec3::new(1.2, 1.2, 1.0),         // Mantendo o zoom out atual
+                translation: Vec3::new(-250.0, 0.0, 0.0), // Valor negativo desloca visualização para direita
+                scale: Vec3::new(1.2, 1.2, 1.0),          // Zoom out para melhor enquadramento
                 ..default()
             },
             ..default()
@@ -94,7 +99,10 @@ fn setup(
         MainCamera,
     ));
 
-    // Texto de instrução
+    // Texto de instruções para o usuário
+    // 
+    // Fornece orientação básica sobre controles de navegação
+    // Posicionado no canto inferior esquerdo da tela
     commands.spawn(
         TextBundle::from_section(
             "Drag to pan, scroll to zoom",
