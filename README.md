@@ -138,9 +138,11 @@ Esta implementação usa técnicas avançadas como paralelismo, estagnação ada
 ## Complexidade Computacional
 
 O algoritmo ACO tem uma complexidade temporal de:
+
 - **O(iterações × formigas × pontos²)** para execução completa
 
 Para problemas grandes, várias otimizações são aplicadas automaticamente:
+
 1. **Lista de candidatos**: Reduz a complexidade para O(iterações × formigas × pontos × tamanho_candidatos)
 2. **Atualização de visualização adaptativa**: Melhora a responsividade da interface
 3. **Ajuste automático do número de formigas**: Otimiza o equilíbrio entre exploração e desempenho
