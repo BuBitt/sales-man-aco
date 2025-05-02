@@ -210,7 +210,7 @@ pub fn update_distance_matrix(
         if n > crate::constants::PARALLEL_THRESHOLD {
             // Dividir o trabalho em chunks por linhas da matriz
             let chunk_size = n.max(1) / num_cpus::get().max(1);
-            let chunk_size = chunk_size.max(1); // Garantir tamanho mínimo de 1
+            let _chunk_size = chunk_size.max(1); // Garantir tamanho mínimo de 1
             
             // Processamento paralelo por linha da matriz
             let results: Vec<(usize, Vec<f32>)> = (0..n).into_par_iter().map(|i| {

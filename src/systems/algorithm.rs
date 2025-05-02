@@ -4,7 +4,6 @@ use rayon::prelude::*;
 use std::time::Instant;
 use crate::resources::*;
 use crate::aco::{Ant, apply_2opt};
-use crate::constants::*;
 
 /// Sistema principal que executa o algoritmo ACO
 /// 
