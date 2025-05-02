@@ -7,6 +7,7 @@ pub struct Ant {
     pub path: Vec<usize>,
     pub visited: Vec<bool>,
     pub distance: f32,
+    pub current_city: usize,
 }
 
 impl Ant {
@@ -15,135 +16,129 @@ impl Ant {
             path: Vec::with_capacity(city_count),
             visited: vec![false; city_count],
             distance: f32::MAX,
+            current_city: 0,
         }
     }
     
-    // Fix method signature to match exactly how it's called in systems/algorithm.rs
     pub fn select_next_city_with_candidates(
-        &mut self,
-        current_city: usize,
-        pheromones: &[Vec<f32>],
-        rng: &mut ThreadRng,
-        params: &bevy::prelude::Res<crate::resources::AcoParameters>,
+        &mut self, 
+        pheromones: &[Vec<f32>], 
         distances: &[Vec<f32>],
-        candidate_list: &[Vec<usize>],
+        candidates: &[Vec<usize>],
+        alpha: f32,
+        beta: f32,
+        candidate_list_size: usize,
     ) -> usize {
-        let alpha = params.alpha;
-        let beta = params.beta;
-        let n = distances.len();
+        let current = self.current_city;
         
-        // Check candidates first for efficiency
-        let candidates = &candidate_list[current_city];
-        let mut valid_candidates = Vec::new();
+        // Safety check - make sure current city is valid index for candidates
+        if current >= candidates.len() {
+            // Fallback to standard selection if current city index is out of bounds
+            return self.select_next_city(pheromones, distances, alpha, beta);
+        }
         
-        for &candidate in candidates {
-            if !self.visited[candidate] {
-                valid_candidates.push(candidate);
+        // Get the candidate list for the current city
+        let candidate_list = &candidates[current];
+        
+        // Safety check: Use a safe candidate size that won't exceed bounds
+        let safe_size = candidate_list_size.min(candidate_list.len());
+        
+        // Initialize variables for selection
+        let mut total = 0.0;
+        let mut probabilities = vec![];
+        
+        // Calculate probabilities only for candidates that are not visited
+        // and respect the safe candidate list size
+        for i in 0..safe_size {
+            if i >= candidate_list.len() {
+                break; // Additional safety check
+            }
+            
+            let candidate = candidate_list[i];
+            if candidate < self.visited.len() && !self.visited[candidate] {
+                let pheromone = pheromones[current][candidate].powf(alpha);
+                let distance = (1.0 / distances[current][candidate]).powf(beta);
+                let prob = pheromone * distance;
+                
+                total += prob;
+                probabilities.push((candidate, prob));
             }
         }
         
-        // If we have valid candidates, select from them
-        if !valid_candidates.is_empty() {
-            // Calculate probabilities for valid candidates
-            let mut probabilities = vec![0.0; n];
-            let mut total = 0.0;
-            
-            for &i in &valid_candidates {
-                let pheromone = pheromones[current_city][i].powf(alpha);
-                let heuristic = if distances[current_city][i] > 0.0 {
-                    (1.0 / distances[current_city][i]).powf(beta)
-                } else {
-                    f32::MAX
-                };
-                
-                probabilities[i] = pheromone * heuristic;
-                total += probabilities[i];
-            }
-            
-            // If total probability is valid, select based on probability
-            if total > 0.0 {
-                let mut rand_val = rng.gen::<f32>() * total;
-                
-                for &i in &valid_candidates {
-                    rand_val -= probabilities[i];
-                    if rand_val <= 0.0 {
-                        return i;
-                    }
-                }
-            }
-            
-            // Fallback to first valid candidate
-            return valid_candidates[0];
+        // If no suitable candidates in the candidate list, check all unvisited cities
+        if probabilities.is_empty() {
+            return self.select_next_city(pheromones, distances, alpha, beta);
         }
         
-        // If no valid candidates, fall back to regular selection
-        self.select_next_city(current_city, pheromones, rng, params, distances)
+        // Select city based on probabilities
+        let random = rand::random::<f32>() * total;
+        let mut cumulative = 0.0;
+        
+        // Fix: iterate over a reference to avoid moving the vector
+        for (city, prob) in &probabilities {
+            cumulative += *prob;
+            if cumulative >= random {
+                return *city;
+            }
+        }
+        
+        // Fallback: return the first city in our probability list
+        if let Some((city, _)) = probabilities.first() {
+            return *city;
+        }
+        
+        // Final fallback - use standard selection method
+        self.select_next_city(pheromones, distances, alpha, beta)
     }
     
-    // Fix method signature to match exactly how it's called in systems/algorithm.rs
     pub fn select_next_city(
         &mut self,
-        current_city: usize,
-        pheromones: &[Vec<f32>],
-        rng: &mut ThreadRng,
-        params: &bevy::prelude::Res<crate::resources::AcoParameters>,
+        pheromones: &[Vec<f32>], 
         distances: &[Vec<f32>],
+        alpha: f32,
+        beta: f32,
     ) -> usize {
-        let alpha = params.alpha;
-        let beta = params.beta;
-        let n = distances.len();
+        let current = self.current_city;
+        
+        // Initialize variables for selection
+        let mut total = 0.0;
+        let mut probabilities = vec![];
         
         // Calculate probabilities for all unvisited cities
-        let mut probabilities = vec![0.0; n];
-        let mut total = 0.0;
-        
-        for i in 0..n {
-            if !self.visited[i] {
-                let pheromone = pheromones[current_city][i].powf(alpha);
-                let heuristic = if distances[current_city][i] > 0.0 {
-                    (1.0 / distances[current_city][i]).powf(beta)
-                } else {
-                    f32::MAX
-                };
+        for city in 0..self.visited.len() {
+            if !self.visited[city] {
+                let pheromone = pheromones[current][city].powf(alpha);
+                let distance = (1.0 / distances[current][city]).powf(beta);
+                let prob = pheromone * distance;
                 
-                probabilities[i] = pheromone * heuristic;
-                total += probabilities[i];
+                total += prob;
+                probabilities.push((city, prob));
             }
         }
         
-        // If all cities visited or total probability is zero, return first unvisited
-        if total <= 0.0 {
-            for i in 0..n {
-                if !self.visited[i] {
-                    return i;
-                }
-            }
-            return current_city; // Fallback if all are visited
-        }
+        // Select city based on probabilities
+        let random = rand::random::<f32>() * total;
+        let mut cumulative = 0.0;
         
-        // Select based on probability
-        let mut rand_val = rng.gen::<f32>() * total;
-        
-        for i in 0..n {
-            if !self.visited[i] && probabilities[i] > 0.0 {
-                rand_val -= probabilities[i];
-                if rand_val <= 0.0 {
-                    return i;
-                }
+        // Fix: iterate over a reference to avoid moving the vector
+        for (city, prob) in &probabilities {
+            cumulative += *prob;
+            if cumulative >= random {
+                return *city;
             }
         }
         
-        // Fallback to first unvisited city
-        for i in 0..n {
-            if !self.visited[i] {
-                return i;
+        // Fallback: If for some reason we didn't select a city, return the first unvisited city
+        for city in 0..self.visited.len() {
+            if !self.visited[city] {
+                return city;
             }
         }
         
-        current_city // This shouldn't happen, but as a fallback
+        // This should never happen if visited tracking is correct
+        current // Return current city as a last resort (though this isn't a good choice)
     }
     
-    // Fix construct_solution to match parameters actually used
     pub fn construct_solution(
         &mut self,
         distances: &[Vec<f32>],
@@ -160,6 +155,7 @@ impl Ant {
         self.path.clear();
         self.visited.fill(false);
         self.distance = 0.0;
+        self.current_city = start_city;
         
         // Start with initial city
         self.path.push(start_city);
@@ -170,11 +166,17 @@ impl Ant {
             let current = *self.path.last().unwrap();
             
             // Select next city using regular method (no candidates)
-            let next = self.select_next_city(current, pheromones, rng, params, distances);
+            let next = self.select_next_city(
+                pheromones,
+                distances,
+                params.alpha,
+                params.beta,
+            );
             
             self.distance += distances[current][next];
             self.path.push(next);
             self.visited[next] = true;
+            self.current_city = next;
         }
         
         // Complete the tour by returning to the start

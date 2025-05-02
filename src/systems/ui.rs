@@ -250,16 +250,47 @@ pub fn ui_system(
                 }
             });
             
-        // Advanced Settings Category
+        // Advanced Settings Category with safe implementation
         egui::CollapsingHeader::new(text.advanced_settings)
             .default_open(false)
             .show(ui, |ui| {
-                ui.label(text.advanced_settings_description);
+                ui.label("These settings affect algorithm behavior and performance:");
+                ui.add_space(5.0);
                 
-                // Consider future addition of these parameters:
-                // - Candidate list size
-                // - Max iterations
-                // - Max iterations without improvement
+                // Add candidate list size control with safe bounds
+                let mut candidate_list_size = aco_state.candidate_list_size.unwrap_or(20);
+                // Ensure candidate list size is always > 0 and <= max points
+                let max_candidates = if points.positions.is_empty() { 50 } else { points.positions.len() - 1 };
+                let max_candidates = max_candidates.max(5).min(50); // Keep within reasonable UI bounds
+                
+                if ui.add(egui::Slider::new(&mut candidate_list_size, 5..=max_candidates)
+                    .text("Neighbor Candidates")).changed() {
+                    aco_state.candidate_list_size = Some(candidate_list_size);
+                }
+                ui.add_space(2.0);
+                
+                // Add max iterations control
+                let mut max_iterations = aco_state.max_iterations.unwrap_or(1000);
+                if ui.add(egui::Slider::new(&mut max_iterations, 100..=5000).text("Max Iterations")).changed() {
+                    aco_state.max_iterations = Some(max_iterations);
+                }
+                ui.add_space(2.0);
+                
+                // Add max iterations without improvement control
+                let mut max_no_improvement = aco_state.max_iterations_no_improvement.unwrap_or(50);
+                if ui.add(egui::Slider::new(&mut max_no_improvement, 10..=500).text("Max No Improvement")).changed() {
+                    aco_state.max_iterations_no_improvement = Some(max_no_improvement);
+                }
+                
+                ui.add_space(5.0);
+                if ui.button("Reset Advanced Settings").clicked() {
+                    aco_state.candidate_list_size = None;
+                    aco_state.max_iterations = None;
+                    aco_state.max_iterations_no_improvement = None;
+                }
+                
+                ui.add_space(4.0);
+                ui.label("Note: Changes take effect on next algorithm run.");
             });
 
         ui.add_space(5.0);

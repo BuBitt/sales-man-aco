@@ -33,14 +33,33 @@ impl Default for CandidateList {
     }
 }
 
-#[derive(Default, Resource)]
+#[derive(Resource)]
 pub struct AcoState {
     pub running: bool,
+    pub iterations: u32,
+    pub iterations_since_improvement: u32,
+    pub pheromones: Vec<Vec<f32>>,
     pub start_time: Option<Instant>,
     pub elapsed_time: Duration,
-    pub iterations: u32,
-    pub pheromones: Vec<Vec<f32>>,
-    pub iterations_since_improvement: u32,
+    pub candidate_list_size: Option<usize>,
+    pub max_iterations: Option<u32>,
+    pub max_iterations_no_improvement: Option<u32>,
+}
+
+impl Default for AcoState {
+    fn default() -> Self {
+        Self {
+            running: false,
+            iterations: 0,
+            iterations_since_improvement: 0,
+            pheromones: Vec::new(),
+            start_time: None,
+            elapsed_time: Duration::from_secs(0),
+            candidate_list_size: None,
+            max_iterations: None,
+            max_iterations_no_improvement: None,
+        }
+    }
 }
 
 #[derive(Default, Resource)]

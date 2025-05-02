@@ -33,12 +33,15 @@ pub fn run_aco_algorithm(
         aco_state.start_time = Some(Instant::now());
     }
 
-    // Use constants or hardcoded values instead of config
-    const MAX_ITERATIONS: u32 = 1000;
-    const MAX_ITERATIONS_WITHOUT_IMPROVEMENT: u32 = 50;
+    // Use configurable values from AcoState if available, otherwise use constants
+    const DEFAULT_MAX_ITERATIONS: u32 = 1000;
+    const DEFAULT_MAX_ITERATIONS_WITHOUT_IMPROVEMENT: u32 = 50;
+
+    let max_iterations = aco_state.max_iterations.unwrap_or(DEFAULT_MAX_ITERATIONS);
+    let max_iterations_no_improvement = aco_state.max_iterations_no_improvement.unwrap_or(DEFAULT_MAX_ITERATIONS_WITHOUT_IMPROVEMENT);
 
     // Se já atingiu o máximo de iterações, para o algoritmo
-    if aco_state.iterations >= MAX_ITERATIONS {
+    if aco_state.iterations >= max_iterations {
         aco_state.running = false;
         if let Some(start_time) = aco_state.start_time {
             aco_state.elapsed_time += Instant::now().duration_since(start_time);
@@ -48,7 +51,7 @@ pub fn run_aco_algorithm(
     }
 
     // Se não houve melhoria após várias iterações, para o algoritmo
-    if aco_state.iterations_since_improvement >= MAX_ITERATIONS_WITHOUT_IMPROVEMENT {
+    if aco_state.iterations_since_improvement >= max_iterations_no_improvement {
         aco_state.running = false;
         if let Some(start_time) = aco_state.start_time {
             aco_state.elapsed_time += Instant::now().duration_since(start_time);
@@ -83,12 +86,15 @@ pub fn run_aco_algorithm(
     let mut rng = thread_rng();
     starting_points.shuffle(&mut rng);
 
-    ants.par_iter_mut().enumerate().for_each(|(i, ant)| {
+    // Get the candidate list size from aco_state or use default
+    let candidate_list_size = aco_state.candidate_list_size.unwrap_or(20);
+
+    ants.par_iter_mut().for_each(|ant| {
         let mut local_rng = thread_rng();
-        let start = if i < starting_points.len() {
-            starting_points[i] 
+        let start = if !starting_points.is_empty() {
+            starting_points[local_rng.gen_range(0..starting_points.len())]
         } else {
-            starting_points[i % starting_points.len()]
+            local_rng.gen_range(0..n)
         };
         
         ant.visited.fill(false);
@@ -102,20 +108,19 @@ pub fn run_aco_algorithm(
             let current = *ant.path.last().unwrap();
             let next = if !candidate_lists.nearest_neighbors.is_empty() {
                 ant.select_next_city_with_candidates(
-                    current, 
-                    &aco_state.pheromones, 
-                    &mut local_rng, 
-                    &aco_params,
-                    &distance_matrix.distances,
-                    &candidate_lists.nearest_neighbors
+                    &aco_state.pheromones,       // pheromones
+                    &distance_matrix.distances,  // distances
+                    &candidate_lists.nearest_neighbors, // candidates
+                    aco_params.alpha,            // alpha
+                    aco_params.beta,             // beta
+                    candidate_list_size          // candidate_list_size
                 )
             } else {
                 ant.select_next_city(
-                    current, 
-                    &aco_state.pheromones, 
-                    &mut local_rng, 
-                    &aco_params,
-                    &distance_matrix.distances
+                    &aco_state.pheromones,
+                    &distance_matrix.distances,
+                    aco_params.alpha,
+                    aco_params.beta
                 )
             };
             
