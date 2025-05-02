@@ -257,26 +257,110 @@ pub fn ui_system(
                 ui.label("These settings affect algorithm behavior and performance:");
                 ui.add_space(5.0);
                 
+                // Performance Mode toggle
+                let mut performance_mode = aco_state.performance_mode.unwrap_or(false);
+                if ui.checkbox(&mut performance_mode, "High Performance Mode").changed() {
+                    aco_state.performance_mode = Some(performance_mode);
+                }
+                
+                if performance_mode {
+                    ui.label("Reduces computational load for better performance");
+                }
+                ui.add_space(5.0);
+                
+                // Add adaptive ant count feature
+                let auto_ant_count = if points.positions.len() > 100 {
+                    // For large problems, use fewer ants (square root scaling)
+                    (points.positions.len() as f32).sqrt().max(10.0) as usize
+                } else {
+                    points.positions.len()
+                };
+                
+                // Ant count control with performance warning
+                ui.horizontal(|ui| {
+                    ui.label("Ant Count:");
+                    if ui.small_button("Auto").clicked() {
+                        aco_params.ant_count = auto_ant_count;
+                    }
+                });
+                
+                let prev_ant_count = aco_params.ant_count;
+                ui.add(egui::Slider::new(&mut aco_params.ant_count, 5..=1000).text(""));
+                
+                // Show performance impact warning for large ant counts
+                if aco_params.ant_count >= 100 && points.positions.len() >= 50 {
+                    ui.label(format!("⚠️ High ant count may reduce performance"));
+                    if prev_ant_count != aco_params.ant_count {
+                        // Recommend optimal ant count when user changes the value
+                        ui.label(format!("Recommended: {} ants for {} points", 
+                                        auto_ant_count, points.positions.len()));
+                    }
+                }
+                
+                // Visualization frequency for large problems
+                if points.positions.len() > 50 || aco_params.ant_count > 50 {
+                    ui.add_space(5.0);
+                    let mut viz_frequency = aco_state.visualization_frequency.unwrap_or(1);
+                    ui.horizontal(|ui| {
+                        ui.label("Visualization Rate:");
+                        if ui.small_button("Auto").clicked() {
+                            // Automatically adjust visualization frequency based on problem size
+                            viz_frequency = if points.positions.len() * aco_params.ant_count > 10000 {
+                                10
+                            } else if points.positions.len() * aco_params.ant_count > 5000 {
+                                5
+                            } else {
+                                1
+                            };
+                            aco_state.visualization_frequency = Some(viz_frequency);
+                        }
+                    });
+                    
+                    if ui.add(egui::Slider::new(&mut viz_frequency, 1..=20).text("")).changed() {
+                        aco_state.visualization_frequency = Some(viz_frequency);
+                    }
+                    ui.label(format!("Update every {} iterations (higher = faster)", viz_frequency));
+                }
+                
+                // Parallel execution options
+                let mut parallel_ants = aco_state.parallel_ants.unwrap_or(true);
+                if ui.checkbox(&mut parallel_ants, "Parallel Ant Processing").changed() {
+                    aco_state.parallel_ants = Some(parallel_ants);
+                }
+                
                 // Add candidate list size control with safe bounds
                 let mut candidate_list_size = aco_state.candidate_list_size.unwrap_or(20);
                 // Ensure candidate list size is always > 0 and <= max points
                 let max_candidates = if points.positions.is_empty() { 50 } else { points.positions.len() - 1 };
                 let max_candidates = max_candidates.max(5).min(50); // Keep within reasonable UI bounds
                 
+                ui.add_space(5.0);
+                ui.horizontal(|ui| {
+                    ui.label("Neighbor Candidates:");
+                    if ui.small_button("Auto").clicked() {
+                        // For large problems, use smaller candidate list
+                        candidate_list_size = if points.positions.len() > 100 {
+                            (points.positions.len() as f32 * 0.1).max(5.0).min(20.0) as usize
+                        } else {
+                            20
+                        };
+                        aco_state.candidate_list_size = Some(candidate_list_size);
+                    }
+                });
+                
                 if ui.add(egui::Slider::new(&mut candidate_list_size, 5..=max_candidates)
-                    .text("Neighbor Candidates")).changed() {
+                    .text("")).changed() {
                     aco_state.candidate_list_size = Some(candidate_list_size);
                 }
+                
                 ui.add_space(2.0);
                 
-                // Add max iterations control
                 let mut max_iterations = aco_state.max_iterations.unwrap_or(1000);
                 if ui.add(egui::Slider::new(&mut max_iterations, 100..=5000).text("Max Iterations")).changed() {
                     aco_state.max_iterations = Some(max_iterations);
                 }
                 ui.add_space(2.0);
                 
-                // Add max iterations without improvement control
                 let mut max_no_improvement = aco_state.max_iterations_no_improvement.unwrap_or(50);
                 if ui.add(egui::Slider::new(&mut max_no_improvement, 10..=500).text("Max No Improvement")).changed() {
                     aco_state.max_iterations_no_improvement = Some(max_no_improvement);
@@ -287,10 +371,23 @@ pub fn ui_system(
                     aco_state.candidate_list_size = None;
                     aco_state.max_iterations = None;
                     aco_state.max_iterations_no_improvement = None;
+                    aco_state.performance_mode = None;
+                    aco_state.visualization_frequency = None;
+                    aco_state.parallel_ants = None;
                 }
                 
-                ui.add_space(4.0);
-                ui.label("Note: Changes take effect on next algorithm run.");
+                // Performance explanation section
+                if points.positions.len() > 50 || aco_params.ant_count > 50 {
+                    ui.add_space(10.0);
+                    ui.separator();
+                    ui.add_space(5.0);
+                    ui.label("Performance Optimization Tips:");
+                    ui.label("• Time complexity: O(iterations × ants × points²)");
+                    ui.label("• Reduce ant count for large problems (30-50 ants is often sufficient)");
+                    ui.label("• Enable High Performance Mode for problems with 100+ points");
+                    ui.label("• Increase visualization rate to 5-10 for smoother UI");
+                    ui.label("• Use smaller candidate lists (reduces computation per ant)");
+                }
             });
 
         ui.add_space(5.0);

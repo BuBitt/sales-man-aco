@@ -41,9 +41,14 @@ pub struct AcoState {
     pub pheromones: Vec<Vec<f32>>,
     pub start_time: Option<Instant>,
     pub elapsed_time: Duration,
+    // Advanced algorithm settings
     pub candidate_list_size: Option<usize>,
     pub max_iterations: Option<u32>,
     pub max_iterations_no_improvement: Option<u32>,
+    // Performance optimization settings
+    pub performance_mode: Option<bool>,
+    pub visualization_frequency: Option<usize>, // Keep as usize, but we'll convert when using
+    pub parallel_ants: Option<bool>,
 }
 
 impl Default for AcoState {
@@ -58,6 +63,9 @@ impl Default for AcoState {
             candidate_list_size: None,
             max_iterations: None,
             max_iterations_no_improvement: None,
+            performance_mode: None,
+            visualization_frequency: None,
+            parallel_ants: Some(true),
         }
     }
 }

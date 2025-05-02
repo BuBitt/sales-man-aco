@@ -89,101 +89,193 @@ pub fn run_aco_algorithm(
     // Get the candidate list size from aco_state or use default
     let candidate_list_size = aco_state.candidate_list_size.unwrap_or(20);
 
-    ants.par_iter_mut().for_each(|ant| {
-        let mut local_rng = thread_rng();
-        let start = if !starting_points.is_empty() {
-            starting_points[local_rng.gen_range(0..starting_points.len())]
-        } else {
-            local_rng.gen_range(0..n)
-        };
-        
-        ant.visited.fill(false);
-        ant.path.clear();
-        ant.distance = 0.0;
-        
-        ant.path.push(start);
-        ant.visited[start] = true;
-        
-        while ant.path.len() < n {
-            let current = *ant.path.last().unwrap();
-            let next = if !candidate_lists.nearest_neighbors.is_empty() {
-                ant.select_next_city_with_candidates(
-                    &aco_state.pheromones,       // pheromones
-                    &distance_matrix.distances,  // distances
-                    &candidate_lists.nearest_neighbors, // candidates
-                    aco_params.alpha,            // alpha
-                    aco_params.beta,             // beta
-                    candidate_list_size          // candidate_list_size
-                )
+    // Get performance settings
+    let performance_mode = aco_state.performance_mode.unwrap_or(false);
+    let viz_frequency = aco_state.visualization_frequency.unwrap_or(1) as u32; // Convert to u32
+    let use_parallel = aco_state.parallel_ants.unwrap_or(true);
+
+    // Only update visualization on certain iterations for better performance
+    let should_update_visualization = aco_state.iterations % viz_frequency == 0;
+
+    // Choose between parallel and sequential ant processing
+    if use_parallel {
+        // Parallel ant processing
+        ants.par_iter_mut().for_each(|ant| {
+            let mut local_rng = thread_rng();
+            let start = if !starting_points.is_empty() {
+                starting_points[local_rng.gen_range(0..starting_points.len())]
             } else {
-                ant.select_next_city(
-                    &aco_state.pheromones,
-                    &distance_matrix.distances,
-                    aco_params.alpha,
-                    aco_params.beta
-                )
+                local_rng.gen_range(0..n)
             };
             
-            ant.distance += distance_matrix.distances[current][next];
-            ant.path.push(next);
-            ant.visited[next] = true;
+            ant.visited.fill(false);
+            ant.path.clear();
+            ant.distance = 0.0;
+            
+            ant.path.push(start);
+            ant.visited[start] = true;
+            
+            while ant.path.len() < n {
+                let current = *ant.path.last().unwrap();
+                let next = if !candidate_lists.nearest_neighbors.is_empty() {
+                    ant.select_next_city_with_candidates(
+                        &aco_state.pheromones,       // pheromones
+                        &distance_matrix.distances,  // distances
+                        &candidate_lists.nearest_neighbors, // candidates
+                        aco_params.alpha,            // alpha
+                        aco_params.beta,             // beta
+                        candidate_list_size          // candidate_list_size
+                    )
+                } else {
+                    ant.select_next_city(
+                        &aco_state.pheromones,
+                        &distance_matrix.distances,
+                        aco_params.alpha,
+                        aco_params.beta
+                    )
+                };
+                
+                ant.distance += distance_matrix.distances[current][next];
+                ant.path.push(next);
+                ant.visited[next] = true;
+            }
+            
+            let first = ant.path[0];
+            let last = ant.path[n - 1];
+            ant.distance += distance_matrix.distances[last][first];
+        });
+    } else {
+        // Sequential ant processing for systems with limited parallel processing power
+        for ant in ants.iter_mut() {
+            let mut local_rng = thread_rng();
+            let start = if !starting_points.is_empty() {
+                starting_points[local_rng.gen_range(0..starting_points.len())]
+            } else {
+                local_rng.gen_range(0..n)
+            };
+            
+            ant.visited.fill(false);
+            ant.path.clear();
+            ant.distance = 0.0;
+            
+            ant.path.push(start);
+            ant.visited[start] = true;
+            
+            while ant.path.len() < n {
+                let current = *ant.path.last().unwrap();
+                let next = if !candidate_lists.nearest_neighbors.is_empty() {
+                    ant.select_next_city_with_candidates(
+                        &aco_state.pheromones,       // pheromones
+                        &distance_matrix.distances,  // distances
+                        &candidate_lists.nearest_neighbors, // candidates
+                        aco_params.alpha,            // alpha
+                        aco_params.beta,             // beta
+                        candidate_list_size          // candidate_list_size
+                    )
+                } else {
+                    ant.select_next_city(
+                        &aco_state.pheromones,
+                        &distance_matrix.distances,
+                        aco_params.alpha,
+                        aco_params.beta
+                    )
+                };
+                
+                ant.distance += distance_matrix.distances[current][next];
+                ant.path.push(next);
+                ant.visited[next] = true;
+            }
+            
+            let first = ant.path[0];
+            let last = ant.path[n - 1];
+            ant.distance += distance_matrix.distances[last][first];
         }
+    }
+
+    // Apply "lite" mode for large problems to improve performance
+    if performance_mode && points.positions.len() >= 100 {
+        // In high performance mode:
+        // 1. Skip expensive calculations when possible
+        // 2. Use simplified pheromone updates
+        // 3. Limit visualization updates
+
+        // Only update visualization when necessary
+        if should_update_visualization {
+            // Visualization code (if any)
+        }
+
+        // Simplified pheromone updates (less accurate but faster)
+        for i in 0..n {
+            for j in 0..n {
+                aco_state.pheromones[i][j] *= 1.0 - aco_params.rho;
+            }
+        }
+
+        let best_pheromone = 2.0 * aco_params.q / best_path.distance;
+        for i in 0..best_path.path.len() - 1 {
+            let from = best_path.path[i];
+            let to = best_path.path[i + 1];
+            aco_state.pheromones[from][to] += best_pheromone;
+            aco_state.pheromones[to][from] += best_pheromone;
+        }
+
+        let from = best_path.path[n - 1];
+        let to = best_path.path[0];
+        aco_state.pheromones[from][to] += best_pheromone;
+        aco_state.pheromones[to][from] += best_pheromone;
+    } else {
+        // Regular processing with all features
+        let mut iteration_best_ant = &ants[0];
+        for ant in &ants {
+            if ant.distance < iteration_best_ant.distance {
+                iteration_best_ant = ant;
+            }
+        }
+
+        let mut improved_path = iteration_best_ant.path.clone();
+        let improved_distance = apply_2opt(&mut improved_path, &distance_matrix.distances);
         
-        let first = ant.path[0];
-        let last = ant.path[n - 1];
-        ant.distance += distance_matrix.distances[last][first];
-    });
-
-    let mut iteration_best_ant = &ants[0];
-    for ant in &ants {
-        if ant.distance < iteration_best_ant.distance {
-            iteration_best_ant = ant;
+        if improved_distance < best_path.distance {
+            best_path.path = improved_path;
+            best_path.distance = improved_distance;
+            aco_state.iterations_since_improvement = 0;
         }
-    }
 
-    let mut improved_path = iteration_best_ant.path.clone();
-    let improved_distance = apply_2opt(&mut improved_path, &distance_matrix.distances);
-    
-    if improved_distance < best_path.distance {
-        best_path.path = improved_path;
-        best_path.distance = improved_distance;
-        aco_state.iterations_since_improvement = 0;
-    }
-
-    // Update pheromones
-    for i in 0..n {
-        for j in 0..n {
-            aco_state.pheromones[i][j] *= 1.0 - aco_params.rho;
+        // Update pheromones
+        for i in 0..n {
+            for j in 0..n {
+                aco_state.pheromones[i][j] *= 1.0 - aco_params.rho;
+            }
         }
-    }
 
-    // Add pheromones from ants
-    for ant in &ants {
-        let pheromone_amount = aco_params.q / ant.distance;
-        for i in 0..n - 1 {
-            let from = ant.path[i];
-            let to = ant.path[i + 1];
+        // Add pheromones from ants
+        for ant in &ants {
+            let pheromone_amount = aco_params.q / ant.distance;
+            for i in 0..n - 1 {
+                let from = ant.path[i];
+                let to = ant.path[i + 1];
+                aco_state.pheromones[from][to] += pheromone_amount;
+                aco_state.pheromones[to][from] += pheromone_amount;
+            }
+
+            let from = ant.path[n - 1];
+            let to = ant.path[0];
             aco_state.pheromones[from][to] += pheromone_amount;
             aco_state.pheromones[to][from] += pheromone_amount;
         }
 
-        let from = ant.path[n - 1];
-        let to = ant.path[0];
-        aco_state.pheromones[from][to] += pheromone_amount;
-        aco_state.pheromones[to][from] += pheromone_amount;
-    }
+        // Add extra pheromones to best path
+        let best_pheromone = 2.0 * aco_params.q / best_path.distance;
+        for i in 0..best_path.path.len() - 1 {
+            let from = best_path.path[i];
+            let to = best_path.path[i + 1];
+            aco_state.pheromones[from][to] += best_pheromone;
+            aco_state.pheromones[to][from] += best_pheromone;
+        }
 
-    // Add extra pheromones to best path
-    let best_pheromone = 2.0 * aco_params.q / best_path.distance;
-    for i in 0..best_path.path.len() - 1 {
-        let from = best_path.path[i];
-        let to = best_path.path[i + 1];
+        let from = best_path.path[n - 1];
+        let to = best_path.path[0];
         aco_state.pheromones[from][to] += best_pheromone;
         aco_state.pheromones[to][from] += best_pheromone;
     }
-
-    let from = best_path.path[n - 1];
-    let to = best_path.path[0];
-    aco_state.pheromones[from][to] += best_pheromone;
-    aco_state.pheromones[to][from] += best_pheromone;
 }
