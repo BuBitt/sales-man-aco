@@ -81,9 +81,16 @@ fn main() {
 fn setup(
     mut commands: Commands,
 ) {
-    // Configuração da câmera principal
+    // Configuração da câmera principal com zoom out e deslocamento para a direita
     commands.spawn((
-        Camera2dBundle::default(),
+        Camera2dBundle {
+            transform: Transform {
+                translation: Vec3::new(150.0, 0.0, 0.0), // Deslocamento para a direita
+                scale: Vec3::new(1.2, 1.2, 1.0),         // Pequeno zoom out
+                ..default()
+            },
+            ..default()
+        },
         MainCamera,
     ));
 
