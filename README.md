@@ -11,6 +11,8 @@ Uma implementação paralela e otimizada do algoritmo de Otimização por Colôn
 - **Interface intuitiva**: Controles simples para interação com o algoritmo
 - **Configuração flexível**: Ajuste parâmetros do algoritmo através da interface ou arquivo de configuração
 - **Temas claro/escuro**: Escolha o tema visual de sua preferência
+- **Otimizações adaptativas**: Ajustes automáticos para melhor desempenho em grandes conjuntos de dados
+- **Modo de alto desempenho**: Opção para priorizar velocidade em hardware limitado
 
 ## Tecnologias
 
@@ -51,11 +53,12 @@ O flag `--release` é altamente recomendado para melhor performance.
 ## Como usar
 
 1. Ajuste o número de pontos (cidades) usando o controle deslizante
-2. Clique em "Gerar Pontos" para criar um novo problema TSP aleatório
-3. (Opcional) Ajuste parâmetros avançados do algoritmo
-4. Clique em "Iniciar" para começar a otimização
-5. Observe em tempo real enquanto o algoritmo busca a melhor rota
-6. A execução para automaticamente quando uma boa solução é encontrada
+2. Defina o número de formigas (agentes) conforme o tamanho do problema
+3. Clique em "Gerar Pontos" para criar um novo problema TSP aleatório
+4. (Opcional) Ajuste parâmetros avançados do algoritmo
+5. Clique em "Iniciar" para começar a otimização
+6. Observe em tempo real enquanto o algoritmo busca a melhor rota
+7. A execução para automaticamente quando uma boa solução é encontrada ou o limite de iterações é atingido
 
 ## Controles
 
@@ -63,14 +66,30 @@ O flag `--release` é altamente recomendado para melhor performance.
 - **Roda do mouse**: Aumentar/diminuir zoom
 - **Tecla T**: Alternar entre tema claro e escuro
 
-## Configuração
+## Configurações Avançadas
 
-O programa usa um arquivo de configuração `aco_config.json` que é criado automaticamente no primeiro uso. Você pode editar este arquivo para personalizar:
+O programa oferece diversas opções avançadas para otimizar o desempenho e qualidade das soluções:
 
-- Parâmetros do algoritmo (α, β, taxa de evaporação, etc.)
-- Tamanho da janela e elementos visuais
-- Limitação de FPS
-- E mais configurações do algoritmo e visualização
+- **Modo de Alto Desempenho**: Reduz a carga computacional para melhor desempenho em problemas grandes
+- **Número de Formigas**: Ajuste automático ou manual (menos formigas = mais rápido, mais formigas = melhor exploração)
+- **Taxa de Visualização**: Controla a frequência de atualização visual para manter a interface responsiva
+- **Processamento Paralelo**: Ative/desative o uso de múltiplos núcleos do processador
+- **Lista de Candidatos**: Limita a busca por cidades vizinhas mais próximas para acelerar o algoritmo
+- **Iterações Máximas**: Define quantas iterações o algoritmo executará antes de parar
+- **Máximo Sem Melhoria**: Interrompe a execução após um número de iterações sem progresso
+
+Para problemas grandes (100+ pontos), o programa oferece recomendações automáticas para otimizar o desempenho.
+
+## Parâmetros do Algoritmo
+
+Os parâmetros principais do algoritmo ACO podem ser ajustados:
+
+- **Alpha (α)**: Controla a influência das trilhas de feromônio
+- **Beta (β)**: Controla a influência da distância entre as cidades
+- **Rho (ρ)**: Taxa de evaporação do feromônio
+- **Q**: Fator de quantidade de depósito de feromônio
+
+Cada parâmetro possui uma descrição detalhada disponível através de dicas que aparecem ao passar o mouse sobre os controles.
 
 ## Solução de Problemas
 
@@ -80,6 +99,14 @@ Se você encontrar problemas de compilação ou execução, verifique:
 2. **Dependências**: Execute `cargo update` para atualizar as dependências
 3. **Performance**: Use sempre `cargo run --release` para melhor desempenho
 4. **Grandes conjuntos de dados**: Para problemas com muitos pontos (>100), o algoritmo otimiza automaticamente o uso de recursos, priorizando eficiência computacional. Isso pode resultar em iterações mais lentas, mas a convergência é mantida.
+
+Se você encontrar problemas de desempenho com muitos pontos (100+), tente:
+
+1. **Ativar o Modo de Alto Desempenho** nas configurações avançadas
+2. **Reduzir o número de formigas** para 30-50 (suficiente para a maioria dos problemas)
+3. **Aumentar a taxa de visualização** para 5-10 (atualiza a interface menos frequentemente)
+4. **Reduzir o tamanho da lista de candidatos** para limitar os cálculos por formiga
+5. **Desativar o processamento paralelo** se estiver em hardware muito limitado
 
 Para depurar problemas de paralelismo, considere executar com variáveis de ambiente para Rayon:
 
@@ -107,6 +134,17 @@ ACO é um algoritmo meta-heurístico inspirado no comportamento de formigas. No 
 4. **Repetição**: O processo é repetido até convergência ou limite de iterações
 
 Esta implementação usa técnicas avançadas como paralelismo, estagnação adaptativa e estratégias elitistas para melhorar a performance e qualidade das soluções.
+
+## Complexidade Computacional
+
+O algoritmo ACO tem uma complexidade temporal de:
+- **O(iterações × formigas × pontos²)** para execução completa
+
+Para problemas grandes, várias otimizações são aplicadas automaticamente:
+1. **Lista de candidatos**: Reduz a complexidade para O(iterações × formigas × pontos × tamanho_candidatos)
+2. **Atualização de visualização adaptativa**: Melhora a responsividade da interface
+3. **Ajuste automático do número de formigas**: Otimiza o equilíbrio entre exploração e desempenho
+4. **Processamento paralelo**: Aproveita múltiplos núcleos de CPU para acelerar os cálculos
 
 ## Licença
 
