@@ -30,12 +30,12 @@ fn setup_gpu(
     
     info!("Inicializando recursos para aceleração em GPU (OpenGL {:?})", gpu_config.opengl_version);
     
-    // Carrega shader de computação com tipo específico
-    let shader_handle: Handle<Shader> = asset_server.load(gpu_config.compute_shader_path);
+    // Add underscore to mark variable as intentionally unused
+    let _shader_handle: Handle<Shader> = asset_server.load(gpu_config.compute_shader_path);
     
     commands.insert_resource(GpuResources {
         initialized: false,
-        shader_handle: None, // No underscore
+        shader_handle: None,
         distance_buffer: None,
         pheromone_buffer: None,
         result_buffer: None,

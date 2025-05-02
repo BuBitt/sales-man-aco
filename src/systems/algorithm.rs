@@ -33,8 +33,12 @@ pub fn run_aco_algorithm(
         aco_state.start_time = Some(Instant::now());
     }
 
+    // Use constants or hardcoded values instead of config
+    const MAX_ITERATIONS: u32 = 1000;
+    const MAX_ITERATIONS_WITHOUT_IMPROVEMENT: u32 = 50;
+
     // Se já atingiu o máximo de iterações, para o algoritmo
-    if aco_state.iterations >= crate::constants::MAX_ITERATIONS {
+    if aco_state.iterations >= MAX_ITERATIONS {
         aco_state.running = false;
         if let Some(start_time) = aco_state.start_time {
             aco_state.elapsed_time += Instant::now().duration_since(start_time);
@@ -44,7 +48,7 @@ pub fn run_aco_algorithm(
     }
 
     // Se não houve melhoria após várias iterações, para o algoritmo
-    if aco_state.iterations_since_improvement >= crate::constants::MAX_ITERATIONS_WITHOUT_IMPROVEMENT {
+    if aco_state.iterations_since_improvement >= MAX_ITERATIONS_WITHOUT_IMPROVEMENT {
         aco_state.running = false;
         if let Some(start_time) = aco_state.start_time {
             aco_state.elapsed_time += Instant::now().duration_since(start_time);

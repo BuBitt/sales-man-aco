@@ -17,6 +17,7 @@ mod systems;
 mod utils;
 mod ui;
 mod plugins;
+mod config;
 
 use components::*;
 use resources::*;
@@ -24,7 +25,8 @@ use systems::*;
 use plugins::ui_plugin::UISetupPlugin;
 use plugins::aco_plugin::AcoPlugin;
 use plugins::visualization_plugin::VisualizationPlugin;
-use plugins::gpu_plugin::GpuAccelerationPlugin; // Plugin personalizado para computação em GPU
+use plugins::gpu_plugin::GpuAccelerationPlugin;
+use config::Config;
 
 /// Macro utilitária para formatação de strings
 /// 
@@ -37,19 +39,18 @@ macro_rules! format_str {
 }
 
 fn main() {
+    // Carregar configurações do arquivo
+    let config = Config::load();
+    
     App::new()
         .add_plugins((
             DefaultPlugins
                 .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        title: "TSP - Ant Colony Optimization".into(),
-                        resolution: (1280.0, 720.0).into(),
-                        ..default()
-                    }),
+                    primary_window: Some(config.get_window()),
                     ..default()
                 })
                 .set(AssetPlugin {
-                    watch_for_changes_override: Some(false), // Desativar em release para melhor performance
+                    watch_for_changes_override: Some(config.rendering.watch_for_changes),
                     ..default()
                 })
                 .set(bevy::log::LogPlugin {
@@ -61,44 +62,34 @@ fn main() {
             UISetupPlugin,
             AcoPlugin,
             VisualizationPlugin,
-            GpuAccelerationPlugin, // Plugin personalizado para computação em GPU
+            GpuAccelerationPlugin,
         ))
-        .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.1)))
-        // Configurações para gerenciamento de memória otimizado
-        .insert_resource(MemoryConfig {
-            max_points_in_view: 2000,
-            use_arena_allocation: true,      // No underscore
-            reuse_vectors: true,             // No underscore
-            vector_pool_size: 512,           // No underscore
-        })
-        // Configurações para aceleração de GPU - ajustada para compatibilidade
-        .insert_resource(GpuConfig {
-            enabled: true,
-            use_gpu_threshold: 100, // Usar GPU para problemas com mais de 100 pontos
-            compute_shader_path: "shaders/aco_compute.wgsl", // Mudado para extensão .wgsl
-            opengl_version: GlVersion::GL4_6,
-            synchronize_with_cpu: true, // No underscore
-        })
-        // Inicializa os recursos do aplicativo
+        .insert_resource(config.get_clear_color())
+        .insert_resource(config.get_memory_config())
+        .insert_resource(config.get_gpu_config())
         .insert_resource(AcoState::default())
         .insert_resource(Points::new())
         .insert_resource(BestPath::default())
-        .insert_resource(AcoParameters::default())
+        .insert_resource(config.get_aco_parameters())
         .insert_resource(UiState::default())
         .insert_resource(EntityTracker::default())
         .insert_resource(DistanceMatrix::default())
         .insert_resource(CandidateList::default())
         .insert_resource(AppLanguage::default())
-        .insert_resource(VectorPool::new(512)) // Pool de vetores reutilizáveis
-        .insert_resource(GpuSyncState::default()) // Estado de sincronização GPU/CPU
+        .insert_resource(VectorPool::new(config.memory.vector_pool_size))
+        .insert_resource(GpuSyncState::default())
+        // Add the config as resource with proper trait
+        .insert_resource(config)
         .add_systems(Startup, setup)
         .add_systems(Update, (
             handle_input, 
             camera_drag, 
             camera_zoom,
-            manage_memory.after(run_aco_algorithm), // Garantir ordem correta
-            gpu_sync_system.before(run_aco_algorithm) // Sistema de sincronização deve rodar antes do ACO
-        ))
+            // Use system labels or system sets instead of direct function references
+            manage_memory,
+            gpu_sync_system,
+            run_aco_algorithm,
+        ).chain())
         .run();
 }
 

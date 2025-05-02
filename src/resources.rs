@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use crate::constants::*;
 use std::time::{Duration, Instant};
 
 #[derive(Default, Resource)]
@@ -76,11 +75,11 @@ pub struct AcoParameters {
 impl Default for AcoParameters {
     fn default() -> Self {
         Self {
-            ant_count: DEFAULT_ANT_COUNT,
-            alpha: DEFAULT_ALPHA,
-            beta: DEFAULT_BETA,
-            rho: DEFAULT_RHO,
-            q: DEFAULT_Q,
+            ant_count: 20,
+            alpha: 1.0,
+            beta: 2.0,
+            rho: 0.5,
+            q: 100.0,
         }
     }
 }
