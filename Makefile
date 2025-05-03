@@ -12,6 +12,7 @@ android:
 	
 # Build de desenvolvimento (com dynamic_linking)
 debug:
+	clear
 	cargo run --features with_dynamic
 
 # Executar release (sem dynamic_linking)

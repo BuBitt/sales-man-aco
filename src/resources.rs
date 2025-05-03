@@ -85,9 +85,14 @@ impl Points {
     }
 }
 
-#[derive(Default, Resource)]
+/// Estado da interface do usuário
+#[derive(Resource, Default)]
 pub struct UiState {
+    /// Indica se o usuário está interagindo com a UI (clicando ou arrastando)
     pub interacting_with_ui: bool,
+    
+    /// Indica se o mouse está sobre a área da UI
+    pub hovering_ui: bool,
 }
 
 #[derive(Resource)]

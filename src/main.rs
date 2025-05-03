@@ -78,18 +78,16 @@ fn main() {
         .insert_resource(AppLanguage::default())
         .insert_resource(VectorPool::new(config.memory.vector_pool_size))
         .insert_resource(GpuSyncState::default())
-        // Add the config as resource with proper trait
         .insert_resource(config)
         .add_systems(Startup, setup)
         .add_systems(Update, (
-            handle_input, 
-            camera_drag, 
+            handle_input,
+            camera_drag,
             camera_zoom,
-            // Use system labels or system sets instead of direct function references
             manage_memory,
             gpu_sync_system,
             run_aco_algorithm,
-        ).chain())
+        ))
         .run();
 }
 
