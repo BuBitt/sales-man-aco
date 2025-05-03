@@ -12,15 +12,11 @@ android:
 	
 # Build de desenvolvimento (com dynamic_linking)
 debug:
-	cargo build --features with_dynamic
+	cargo run --features with_dynamic
 
 # Executar release (sem dynamic_linking)
 run-release: release
 	./$(BIN)
-
-# Executar debug (com dynamic_linking)
-run-debug: debug
-	LD_LIBRARY_PATH=target/debug/deps ./$(BIN_DEBUG)
 
 # Limpar o projeto
 clean:

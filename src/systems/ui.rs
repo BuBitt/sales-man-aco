@@ -90,7 +90,10 @@ pub fn ui_system(
 
     egui::Window::new("TSP Controls")
         .default_width(320.0)
+        .max_width(320.0)
         .resizable(false)
+        .fixed_pos([ctx.available_rect().right() - 330.0, 10.0])
+        .auto_sized() // Removed the 'true' parameter - this method takes no arguments
         .show(ctx, |ui| {
         ui.add_space(5.0);
 
@@ -106,22 +109,24 @@ pub fn ui_system(
 
         ui.add_space(10.0);
         
-        // Point count control with simplified label
-        ui.add(egui::Slider::new(&mut points.count, 5..=1000).text("Points"));
+        // Point count slider with proper translation
+        ui.add(egui::Slider::new(&mut points.count, 5..=1000).text(text.points_slider))
+            .on_hover_text("Quantidade de pontos (cidades) para o problema");
         
-        // Add ant count control with simplified label
-        ui.add(egui::Slider::new(&mut aco_params.ant_count, 5..=1000).text("Ants"));
-
+        // Ant count slider with proper translation
+        let auto_ant_count = (points.count / 3).max(10).min(100);
+        ui.add(egui::Slider::new(&mut aco_params.ant_count, 5..=1000).text(text.ant_count))
+            .on_hover_text("Número de formigas para explorar soluções");
+        
         ui.add_space(8.0);
         
-        // Center the generate points button
+        // Place buttons side by side below the sliders
         ui.horizontal(|ui| {
             let available_width = ui.available_width();
-            let button_width = 180.0;
-            let offset = (available_width - button_width) / 2.0;
+            let button_width = available_width / 2.0 - 5.0; // Half the width minus a small gap
             
-            ui.add_space(offset);
-            if ui.add_sized([button_width, 28.0], egui::Button::new(text.generate_points)).clicked() {
+            // Generate Points button
+            if ui.add_sized([button_width, 32.0], egui::Button::new(text.generate_points)).clicked() {
                 entity_tracker.point_entities.clear();
                 entity_tracker.path_entities.clear();
                 
@@ -156,25 +161,14 @@ pub fn ui_system(
                 let n = points.positions.len();
                 aco_state.pheromones = vec![vec![1.0; n]; n];
             }
-        });
-
-        ui.add_space(5.0);
-        ui.separator();
-        ui.add_space(5.0);
-        
-        // Dynamic Start/Stop/Run Again button - centered with fixed size
-        ui.horizontal(|ui| {
-            let available_width = ui.available_width();
-            let button_width = 160.0;
-            let offset = (available_width - button_width) / 2.0;
             
-            ui.add_space(offset);
+            // Add a small space between buttons
+            ui.add_space(10.0);
             
-            // Determine button text based on algorithm state
+            // Run/Start button
             let button_text = if aco_state.running { 
                 text.stop 
             } else if aco_state.iterations > 0 && !points.positions.is_empty() { 
-                // If algorithm has run but is stopped, and points exist, show "Run Again"
                 text.run_again 
             } else { 
                 text.start 
